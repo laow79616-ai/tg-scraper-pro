@@ -1,0 +1,10 @@
+*.session
+*.session-journal
+__pycache__/
+*.pyc
+.env
+*.bak*
+*.bak.*
+data/tasks.json
+data/*.session
+data/*.session-journal

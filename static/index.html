@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TG 采集工具 Pro</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { font-size: 22px; }
+        .header .monitor-badge {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        .monitor-badge.active { background: #4caf50; }
+        .monitor-badge.inactive { background: rgba(255,255,255,0.2); }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        
+        /* 统计卡片 */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 18px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .stat-card .number { font-size: 28px; font-weight: bold; }
+        .stat-card .label { font-size: 12px; color: #888; margin-top: 4px; }
+        .stat-card .number.blue { color: #2196f3; }
+        .stat-card .number.green { color: #4caf50; }
+        .stat-card .number.orange { color: #ff9800; }
+        .stat-card .number.red { color: #f44336; }
+        .stat-card .number.purple { color: #9c27b0; }
+
+        /* 标签页 */
+        .tabs {
+            display: flex;
+            background: white;
+            border-radius: 12px 12px 0 0;
+            overflow-x: auto;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .tab {
+            padding: 14px 24px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            font-size: 14px;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .tab:hover { background: #f5f5f5; }
+        .tab.active { border-bottom-color: #667eea; color: #667eea; font-weight: bold; }
+        .tab-content {
+            background: white;
+            border-radius: 0 0 12px 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            margin-bottom: 20px;
+            display: none;
+        }
+        .tab-content.active { display: block; }
+
+        /* 表单元素 */
+        .form-row { display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap; }
+        .form-group { flex: 1; min-width: 200px; }
+        .form-group label { display: block; font-size: 13px; color: #666; margin-bottom: 5px; }
+        input, textarea, select {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        input:focus, textarea:focus { border-color: #667eea; outline: none; }
+        textarea { resize: vertical; min-height: 100px; }
+
+        /* 按钮 */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-success { background: #4caf50; color: white; }
+        .btn-danger { background: #f44336; color: white; }
+        .btn-warning { background: #ff9800; color: white; }
+        .btn-info { background: #2196f3; color: white; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+        /* 账号卡片 */
+        .account-card {
+            border: 1px solid #eee;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: box-shadow 0.2s;
+        }
+        .account-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .account-info { flex: 1; }
+        .account-info .name { font-weight: bold; font-size: 15px; }
+        .account-info .detail { font-size: 12px; color: #888; margin-top: 4px; }
+        .status-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            display: inline-block; margin-right: 6px;
+        }
+        .status-dot.online { background: #4caf50; }
+        .status-dot.offline { background: #ccc; }
+        .status-dot.error { background: #f44336; }
+        .account-actions { display: flex; gap: 8px; }
+
+        /* 群组列表 */
+        .group-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .group-item:last-child { border-bottom: none; }
+        .group-title { font-weight: 500; }
+        .group-meta { font-size: 12px; color: #888; }
+
+        /* 表格 */
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #f0f0f0; }
+        th { background: #f8f9fa; font-weight: 600; color: #555; }
+
+        /* 模态框 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            width: 90%;
+            max-width: 450px;
+        }
+        .modal-content h3 { margin-bottom: 20px; }
+
+        /* 日志 */
+        .log-box {
+            background: #1a1a2e;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        .log-box .log-line { margin-bottom: 4px; }
+        .log-box .log-time { color: #888; }
+        .log-box .log-info { color: #4caf50; }
+        .log-box .log-error { color: #f44336; }
+
+        .spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .section-title { font-size: 16px; font-weight: bold; margin-bottom: 15px; color: #333; }
+        .divider { height: 1px; background: #eee; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>TG 采集工具 Pro</h1>
+        <div style="display:flex;align-items:center;gap:12px;">
+            <span id="monitor-badge" class="monitor-badge inactive">监听未启动</span>
+            <button onclick="doLogout()" style="padding:5px 12px;border-radius:15px;border:1px solid rgba(255,255,255,0.5);background:transparent;color:white;cursor:pointer;font-size:12px;">退出</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- 统计 -->
+        <div class="stats-row">
+            <div class="stat-card"><div class="number blue" id="stat-users">0</div><div class="label">已采集用户</div></div>
+            <div class="stat-card"><div class="number green" id="stat-usernames">0</div><div class="label">有效用户名</div></div>
+            <div class="stat-card"><div class="number orange" id="stat-groups">0</div><div class="label">已发现群组</div></div>
+            <div class="stat-card"><div class="number purple" id="stat-accounts">0</div><div class="label">在线账号</div></div>
+            <div class="stat-card"><div class="number red" id="stat-tasks">0</div><div class="label">采集任务</div></div>
+        </div>
+
+        <!-- 标签页 -->
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('accounts')">账号管理</div>
+            <div class="tab" onclick="switchTab('search')">搜索群组</div>
+            <div class="tab" onclick="switchTab('scrape')">采集任务</div>
+            <div class="tab" onclick="switchTab('monitor');refreshMonitorTargets()">24H监听</div>
+            <div class="tab" onclick="switchTab('data')">数据管理</div>
+        </div>
+
+        <!-- 账号管理 -->
+        <div class="tab-content active" id="tab-accounts">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <div class="section-title">水军账号管理（最多5个）</div>
+                <div>
+                    <button class="btn btn-info btn-sm" onclick="connectAllAccounts()">一键全部连接</button>
+                    <button class="btn btn-primary btn-sm" onclick="showAddAccount()">+ 添加账号</button>
+                </div>
+            </div>
+            <div id="accounts-list"></div>
+        </div>
+
+        <!-- 搜索群组 -->
+        <div class="tab-content" id="tab-search">
+            <div class="section-title">关键词搜索群组</div>
+            <div class="form-row">
+                <div class="form-group" style="flex:3;">
+                    <input type="text" id="search-keyword" placeholder="关键词，或 t.me/xxx、@username、t.me/+邀请码">
+                </div>
+                <div class="form-group" style="flex:0;">
+                    <button class="btn btn-primary" onclick="searchGroups()" id="btn-search">搜索</button>
+                    <button class="btn" onclick="addGroupByLink(false)" id="btn-add-link" style="background:#6366f1;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;">添加链接</button>
+                    <button class="btn" onclick="addGroupByLink(true)" id="btn-add-listen" style="background:#0ea5e9;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;">添加并监听</button>
+                </div>
+            </div>
+            <div class="divider"></div>
+            <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;">
+                <span>已发现的群组 <span id="groups-count" style="font-size:12px;color:#888;"></span></span>
+                <button id="btn-scrape-all" onclick="scrapeAllGroups()" style="background:#10b981;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">一键全部采集</button>
+            </div>
+            <div id="groups-list"></div>
+        </div>
+
+        <!-- 采集任务 -->
+        <div class="tab-content" id="tab-scrape">
+            <div class="section-title">新建采集任务</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>采集模式</label>
+                    <select id="scrape-mode">
+                        <option value="members">成员列表采集（获取群组完整成员）</option>
+                        <option value="messages">消息采集（通过历史消息收集发言者）</option>
+                    </select>
+                </div>
+                <div class="form-group" id="msg-limit-group" style="display:none;">
+                    <label>消息数量限制</label>
+                    <input type="number" id="msg-limit" value="1000" min="100" max="10000">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>群组/频道链接（每行一个）</label>
+                <textarea id="scrape-links" placeholder="https://t.me/example_group&#10;@another_channel&#10;https://t.me/some_channel"></textarea>
+            </div>
+            <button class="btn btn-success" onclick="startScrape()" id="btn-scrape">开始采集</button>
+            
+            <div class="divider"></div>
+            <div class="section-title">采集日志</div>
+            <div class="log-box" id="scrape-log">
+                <div class="log-line"><span class="log-time">[系统]</span> 等待采集任务...</div>
+            </div>
+        </div>
+
+        <!-- 24H监听 -->
+        <div class="tab-content" id="tab-monitor">
+            <div class="section-title">24小时实时监听</div>
+            <div class="help-text" style="color:#666;font-size:13px;margin:8px 0 16px;">
+                监听目标来自「搜索群组」里已添加的群/频道，无需再输入链接。<br>
+                启动后，在线账号会持续监听这些群，自动采集新成员和发言用户。
+            </div>
+            <div id="monitor-target-summary" style="margin-bottom:12px;font-size:13px;color:#333;">将监听已添加群组：-</div>
+                <div style="margin-top:16px;display:flex;gap:10px;">
+                    <button class="btn btn-success" onclick="startMonitor()" id="btn-monitor-start">启动监听</button>
+                    <button class="btn btn-danger" onclick="stopMonitor()" id="btn-monitor-stop">停止监听</button>
+                </div>
+                <div class="section-title" style="margin-top:20px;">监听状态</div>
+                <div id="monitor-info">未启动</div>
+
+            <textarea id="monitor-groups" style="display:none;" placeholder=""></textarea>
+            </div>
+            <div style="margin-top:15px; display:flex; gap:10px;"></div>
+            <div class="divider"></div>
+        </div>
+
+        <!-- 数据管理 -->
+        <div class="tab-content" id="tab-data">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <div class="section-title">采集数据管理</div>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn btn-success btn-sm" onclick="exportCSV()">导出 CSV</button>
+                    <button class="btn btn-info btn-sm" onclick="exportTXT()">导出 TXT（纯用户名）</button>
+                    <button class="btn btn-danger btn-sm" onclick="clearData()">清空数据</button>
+                </div>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>用户名</th>
+                        <th>名字</th>
+                        <th>用户ID</th>
+                        <th>来源</th>
+                        <th>采集方式</th>
+                        <th>时间</th>
+                    </tr>
+                </thead>
+                <tbody id="users-table"></tbody>
+            </table>
+            <div style="margin-top:15px; text-align:center;">
+                <button class="btn btn-sm btn-primary" onclick="loadMoreUsers()">加载更多</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加账号弹窗 -->
+    <div class="modal" id="modal-add-account">
+        <div class="modal-content">
+            <h3>添加水军账号</h3>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label>账号名称</label>
+                <input type="text" id="new-acc-name" placeholder="例如：水军1号">
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label>API ID</label>
+                <input type="text" id="new-acc-api-id" placeholder="从 my.telegram.org 获取">
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label>API Hash</label>
+                <input type="text" id="new-acc-api-hash" placeholder="从 my.telegram.org 获取">
+            </div>
+            <div class="form-group" style="margin-bottom:20px;">
+                <label>手机号（带区号）</label>
+                <input type="text" id="new-acc-phone" placeholder="+60196075456">
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-primary" onclick="addAccount()">添加</button>
+                <button class="btn" style="background:#eee;" onclick="closeModal('modal-add-account')">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 验证码弹窗 -->
+    <div class="modal" id="modal-code">
+        <div class="modal-content">
+            <h3>输入验证码</h3>
+            <p style="color:#666; font-size:13px; margin-bottom:15px;">请查看 Telegram 收到的验证码</p>
+            <div class="form-group" style="margin-bottom:12px;">
+                <input type="text" id="verify-code" placeholder="输入验证码">
+            </div>
+            <div class="form-group" style="margin-bottom:20px;">
+                <input type="password" id="verify-password" placeholder="两步验证密码（如有）">
+            </div>
+            <button class="btn btn-primary" onclick="submitCode()">确认</button>
+        </div>
+    </div>
+
+    <script>
+        let currentCodeAccountId = null;
+        let usersPage = 1;
+
+        // 切换标签页
+        function switchTab(name) {
+            document.querySelectorAll('.tab').forEach((t, i) => {
+                t.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById('tab-' + name).classList.add('active');
+            event.target.classList.add('active');
+
+            if (name === 'accounts') loadAccounts();
+            if (name === 'search') loadGroups();
+            if (name === 'data') { usersPage = 1; loadUsers(); }
+            if (name === 'monitor') loadMonitorStatus();
+        }
+
+        // 带超时的 fetch
+        function fetchAPI(url, options = {}, timeout = 120000) {
+            return Promise.race([
+                fetch(url, options),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('请求超时')), timeout))
+            ]);
+        }
+
+        // ============ 统计 ============
+        async function loadStats() {
+            try {
+                const res = await fetchAPI('/api/stats');
+                const data = await res.json();
+                document.getElementById('stat-users').textContent = data.total_users;
+                document.getElementById('stat-usernames').textContent = data.total_usernames;
+                document.getElementById('stat-groups').textContent = data.total_groups;
+                document.getElementById('stat-accounts').textContent = `${data.online_accounts}/${data.total_accounts}`;
+                document.getElementById('stat-tasks').textContent = data.total_tasks;
+
+                const badge = document.getElementById('monitor-badge');
+                if (data.monitor_running) {
+                    badge.className = 'monitor-badge active';
+                    badge.textContent = '监听运行中';
+                    if (document.getElementById('btn-monitor-start')) document.getElementById('btn-monitor-start').disabled = true;
+                    if (document.getElementById('btn-monitor-stop')) document.getElementById('btn-monitor-stop').disabled = false;
+                } else {
+                    badge.className = 'monitor-badge inactive';
+                    badge.textContent = '监听未启动';
+                    if (document.getElementById('btn-monitor-start')) document.getElementById('btn-monitor-start').disabled = false;
+                    if (document.getElementById('btn-monitor-stop')) document.getElementById('btn-monitor-stop').disabled = true;
+                }
+            } catch (e) {}
+        }
+
+        // ============ 账号管理 ============
+        async function loadAccounts() {
+            try {
+                const res = await fetchAPI('/api/accounts');
+                const accounts = await res.json();
+                const list = document.getElementById('accounts-list');
+                if (accounts.length === 0) {
+                    list.innerHTML = '<p style="color:#888; text-align:center; padding:30px;">暂无账号，请点击"添加账号"</p>';
+                    return;
+                }
+                list.innerHTML = accounts.map(acc => `
+                    <div class="account-card">
+                        <div class="account-info">
+                            <div class="name">
+                                <span class="status-dot ${acc.online_status === 'online' ? 'online' : 'offline'}"></span>
+                                ${acc.name} ${acc.connected_username ? '(@' + acc.connected_username + ')' : ''}
+                            </div>
+                            <div class="detail">手机: ${acc.phone} | API ID: ${acc.api_id} | 状态: ${acc.online_status === 'online' ? '在线' : '离线'}</div>
+                        </div>
+                        <div class="account-actions">
+                            ${acc.online_status === 'online' 
+                                ? `<button class="btn btn-sm btn-warning" onclick="disconnectAccount('${acc.id}')">断开</button>`
+                                : `<button class="btn btn-sm btn-success" onclick="connectAccount('${acc.id}')">连接</button>`
+                            }
+                            <button class="btn btn-sm btn-info" onclick="checkAccount('${acc.id}')">自检</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteAccount('${acc.id}')">删除</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function showAddAccount() {
+            document.getElementById('modal-add-account').classList.add('active');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        async function addAccount() {
+            const data = {
+                name: document.getElementById('new-acc-name').value || '水军账号',
+                api_id: document.getElementById('new-acc-api-id').value,
+                api_hash: document.getElementById('new-acc-api-hash').value,
+                phone: document.getElementById('new-acc-phone').value,
+            };
+            if (!data.api_id || !data.api_hash || !data.phone) {
+                alert('请填写完整信息');
+                return;
+            }
+            await fetchAPI('/api/accounts', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            closeModal('modal-add-account');
+            loadAccounts();
+            loadStats();
+        }
+
+        async function connectAccount(accId) {
+            try {
+                const res = await fetchAPI(`/api/accounts/${accId}/connect`, {method: 'POST'}, 120000);
+                const data = await res.json();
+                if (data.status === 'need_code') {
+                    currentCodeAccountId = accId;
+                    document.getElementById('modal-code').classList.add('active');
+                } else if (data.status === 'connected') {
+                    alert('连接成功: @' + data.username);
+                    loadAccounts();
+                    loadStats();
+                } else {
+                    alert('连接失败: ' + data.message);
+                }
+            } catch (e) {
+                alert('连接失败: ' + e.message);
+            }
+        }
+
+        async function disconnectAccount(accId) {
+            await fetchAPI(`/api/accounts/${accId}/disconnect`, {method: 'POST'});
+            loadAccounts();
+            loadStats();
+        }
+
+        async function deleteAccount(accId) {
+            if (!confirm('确定删除此账号？')) return;
+            await fetchAPI(`/api/accounts/${accId}`, {method: 'DELETE'});
+            loadAccounts();
+            loadStats();
+        }
+
+        async function checkAccount(accId) {
+            try {
+                const res = await fetchAPI(`/api/accounts/${accId}/check`);
+                const data = await res.json();
+                if (data.status === 'online') {
+                    alert('账号正常 ✓\n用户名: @' + data.username);
+                } else if (data.status === 'restricted') {
+                    alert('账号异常 ✗\n' + data.message);
+                } else {
+                    alert('状态: ' + data.status + '\n' + (data.message || ''));
+                }
+            } catch (e) {
+                alert('检查失败: ' + e.message);
+            }
+        }
+
+        async function connectAllAccounts() {
+            try {
+                const res = await fetchAPI('/api/accounts/connect_all', {method: 'POST'}, 300000);
+                const data = await res.json();
+                let msg = '连接结果：\n';
+                data.results.forEach(r => {
+                    msg += `${r.id}: ${r.result.status} ${r.result.username || r.result.message || ''}\n`;
+                });
+                alert(msg);
+                loadAccounts();
+                loadStats();
+            } catch (e) {
+                alert('操作失败: ' + e.message);
+            }
+        }
+
+        async function submitCode() {
+            const code = document.getElementById('verify-code').value;
+            const password = document.getElementById('verify-password').value;
+            try {
+                const res = await fetchAPI(`/api/accounts/${currentCodeAccountId}/submit_code`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({code, password})
+                });
+                const data = await res.json();
+                if (data.status === 'connected') {
+                    alert('验证成功！');
+                    closeModal('modal-code');
+                    loadAccounts();
+                    loadStats();
+                } else if (data.status === 'need_password') {
+                    alert('需要输入两步验证密码');
+                } else {
+                    alert('验证失败: ' + data.message);
+                }
+            } catch (e) {
+                alert('失败: ' + e.message);
+            }
+        }
+
+        // ============ 搜索群组 ============
+
+        function parseTgLink(raw) {
+            const s = (raw || '').trim();
+            if (!s) return null;
+            if (s.startsWith('@') && /^@[A-Za-z0-9_]{4,}$/.test(s)) return { kind: 'username', username: s.slice(1) };
+            const m = s.match(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me|telegram\.dog)\/(.+)$/i);
+            if (m) {
+                const path = m[1].replace(/\/+$/, '');
+                const parts = path.split('/');
+                const head = parts[0];
+                if (head === 'joinchat' && parts[1]) return { kind: 'invite', hash: parts[1] };
+                if (head.startsWith('+')) return { kind: 'invite', hash: head.slice(1) };
+                if (/^[A-Za-z0-9_]{4,}$/.test(head)) return { kind: 'username', username: head };
+            }
+            if (/^[A-Za-z0-9_]{4,}$/.test(s)) return { kind: 'username', username: s };
+            return null;
+        }
+        async function addGroupByLink(listen) {
+            const input = document.getElementById('search-keyword');
+            const raw = (input.value || '').trim();
+            if (!parseTgLink(raw)) { alert('请输入 t.me 链接、邀请链接或 @username'); return; }
+            const btn = document.getElementById(listen ? 'btn-add-listen' : 'btn-add-link');
+            const old = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = listen ? '解析并监听中...' : '解析中...';
+            try {
+                const res = await fetch('/api/groups/from-link', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ link: raw, listen: !!listen, scrape: false })
+                });
+                const data = await res.json();
+                if (data.status !== 'ok') { alert(data.message || '添加失败'); return; }
+                if (typeof loadGroups === 'function') await loadGroups();
+                else if (typeof renderDiscoveredGroups === 'function') renderDiscoveredGroups();
+                else if (typeof searchGroups === 'function') { /* keep list */ location.hash = '#groups'; }
+                alert(data.message || '已添加');
+            } catch (e) {
+                alert('请求失败: ' + e);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = old;
+            }
+        }
+
+        async function searchGroups() {
+            const keyword = document.getElementById('search-keyword').value.trim();
+            if (!keyword) { alert('请输入关键词'); return; }
+
+            const btn = document.getElementById('btn-search');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> 搜索中...';
+
+            try {
+                const res = await fetchAPI('/api/search_groups', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({keyword})
+                }, 60000);
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    alert(`找到 ${data.count} 个相关群组/频道`);
+                    loadGroups();
+                } else {
+                    alert('搜索失败: ' + data.message);
+                }
+            } catch (e) {
+                alert('搜索失败: ' + e.message);
+            }
+
+            btn.disabled = false;
+            btn.textContent = '搜索';
+        }
+
+        async function loadGroups() {
+            try {
+                const res = await fetchAPI('/api/groups');
+                const groups = await res.json();
+                document.getElementById('groups-count').textContent = `(共 ${groups.length} 个)`;
+                const list = document.getElementById('groups-list');
+                if (groups.length === 0) {
+                    list.innerHTML = '<p style="color:#888; text-align:center; padding:20px;">暂无群组，请搜索关键词</p>';
+                    return;
+                }
+                list.innerHTML = groups.map(g => `
+                    <div class="group-item">
+                        <div>
+                            <div class="group-title">${g.title} ${g.username ? '(@' + g.username + ')' : ''}</div>
+                            <div class="group-meta">类型: ${g.type === 'channel' ? '频道' : '群组'} | 成员: ${g.participants_count || '未知'} | 关键词: ${g.keyword} | 发现时间: ${g.found_at}</div>
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-success" onclick="scrapeGroup('${g.username || g.id}')">采集</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteGroup('${g.id}')">删除</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {}
+        }
+
+        async function deleteGroup(groupId) {
+            await fetchAPI(`/api/groups/${groupId}`, {method: 'DELETE'});
+            loadGroups();
+            loadStats();
+        }
+
+        function scrapeGroup(username) {
+            switchTab('scrape');
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab')[2].classList.add('active');
+            document.getElementById('scrape-links').value = username.startsWith('@') || username.startsWith('http') ? username : '@' + username;
+        }
+
+        // ============ 采集任务 ============
+        document.getElementById('scrape-mode').addEventListener('change', function() {
+            document.getElementById('msg-limit-group').style.display = this.value === 'messages' ? 'block' : 'none';
+        });
+
+        async function startScrape() {
+            const mode = document.getElementById('scrape-mode').value;
+            const links = document.getElementById('scrape-links').value.trim();
+            if (!links) { alert('请输入群组链接'); return; }
+
+            const btn = document.getElementById('btn-scrape');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> 采集中...';
+            addLog('开始采集任务...', 'info');
+
+            const endpoint = mode === 'members' ? '/api/scrape/members' : '/api/scrape/messages';
+            const body = { links };
+            if (mode === 'messages') {
+                body.limit = parseInt(document.getElementById('msg-limit').value) || 1000;
+            }
+
+            try {
+                const res = await fetchAPI(endpoint, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body)
+                }, 600000);
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    data.results.forEach(r => {
+                        if (r.result.status === 'ok') {
+                            addLog(`✓ ${r.link}: 采集到 ${r.result.count} 个用户`, 'info');
+                        } else {
+                            addLog(`✗ ${r.link}: ${r.result.message}`, 'error');
+                        }
+                    });
+                } else {
+                    addLog('采集失败: ' + (data.message || '未知错误'), 'error');
+                }
+            } catch (e) {
+                addLog('采集失败: ' + e.message, 'error');
+            }
+
+            btn.disabled = false;
+            btn.textContent = '开始采集';
+            loadStats();
+        }
+
+        function addLog(msg, type = 'info') {
+            const log = document.getElementById('scrape-log');
+            const time = new Date().toLocaleTimeString();
+            log.innerHTML += `<div class="log-line"><span class="log-time">[${time}]</span> <span class="log-${type}">${msg}</span></div>`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+
+        async function linksFromAddedGroups() {
+            const res = await fetchAPI('/api/groups');
+            const data = await res.json();
+            const list = data.groups || data.data || data || [];
+            return (Array.isArray(list) ? list : []).map(g => {
+                if (g.username) return 'https://t.me/' + g.username;
+                return g.link || '';
+            }).filter(Boolean);
+        }
+
+        // ============ 监听 ============
+
+        async function refreshMonitorTargets() {
+            const el = document.getElementById('monitor-target-summary');
+            try {
+                const res = await fetchAPI('/api/groups');
+                const data = await res.json();
+                const list = Array.isArray(data) ? data : (data.groups || []);
+                const links = list.map(g => g.username ? ('https://t.me/' + g.username) : (g.link || '')).filter(Boolean);
+                if (el) el.textContent = '将监听已添加群组：' + list.length + ' 个';
+                const ta = document.getElementById('monitor-groups');
+                if (ta) ta.value = links.join('\n');
+                return links;
+            } catch (e) {
+                if (el) el.textContent = '读取已添加群组失败';
+                return [];
+            }
+        }
+
+        async function startMonitor() {
+            const btn = document.getElementById('btn-monitor-start');
+            const stopBtn = document.getElementById('btn-monitor-stop');
+            if (btn) btn.disabled = true;
+            try {
+                let groups = await refreshMonitorTargets();
+                if (!groups.length) {
+                    const resG = await fetchAPI('/api/groups');
+                    const dataG = await resG.json();
+                    const list = Array.isArray(dataG) ? dataG : (dataG.groups || dataG.data || []);
+                    groups = list.map(g => g.username ? ('https://t.me/' + g.username) : (g.link || '')).filter(Boolean);
+                }
+                const res = await fetchAPI('/api/monitor/start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ groups })
+                });
+                const data = await res.json();
+                if (data.status === 'ok' || data.status === 'success') {
+                    alert('监听已启动，群组数: ' + groups.length);
+                    const badge = document.getElementById('monitor-badge');
+                    if (badge) { badge.textContent = '监听运行中'; badge.classList.remove('inactive'); badge.classList.add('active'); }
+                    const topStop = document.getElementById('btn-monitor-stop-top');
+                    if (topStop) topStop.disabled = false;
+                } else {
+                    alert('启动失败: ' + (data.message || '未知错误'));
+                }
+            } catch (e) {
+                alert('失败: ' + e.message);
+            } finally {
+                if (typeof loadMonitorStatus === 'function') await loadMonitorStatus();
+                else {
+                    if (btn) btn.disabled = false;
+                    if (stopBtn) stopBtn.disabled = false;
+                }
+            }
+        }
+
+
+        function isMonitorRunning(data) {
+            if (!data) return false;
+            if (data.running === true || data.active === true) return true;
+            const s = String(data.status || '').toLowerCase();
+            if (['running', 'ok', 'started', 'success', 'online'].includes(s) && (data.started_at || (data.accounts || []).length || data.account_count)) return true;
+            if (s === 'running' || s === 'started') return true;
+            return false;
+        }
+
+        async function stopMonitor() {
+            try {
+                await fetchAPI('/api/monitor/stop', {method: 'POST'});
+                alert('监听已停止');
+                document.getElementById('btn-monitor-start').disabled = false;
+                document.getElementById('btn-monitor-stop').disabled = true;
+                loadMonitorStatus();
+                loadStats();
+            } catch (e) {
+                alert('失败: ' + e.message);
+            }
+        }
+
+        async function loadMonitorStatus() {
+            try {
+                const res = await fetchAPI('/api/monitor/status');
+                const data = await res.json();
+                const running = data.running === true || data.running === 1 || data.running === 'true';
+                const badge = document.getElementById('monitor-badge');
+                const info = document.getElementById('monitor-info') || document.getElementById('monitor-status-info') || document.getElementById('monitor-status');
+                const startBtn = document.getElementById('btn-monitor-start');
+                const stopBtn = document.getElementById('btn-monitor-stop');
+                const topStop = document.getElementById('btn-monitor-stop-top');
+                if (badge) {
+                    badge.textContent = running ? '监听运行中' : '监听未启动';
+                    badge.classList.toggle('active', !!running);
+                    badge.classList.toggle('inactive', !running);
+                }
+                if (info) {
+                    info.innerHTML = running
+                        ? ('<span style="color:#4caf50;">● 运行中</span><br>启动时间: ' + (data.started_at || '-') + '<br>监听账号数: ' + ((data.accounts || []).length))
+                        : '未启动';
+                }
+                if (startBtn) startBtn.disabled = !!running;
+                if (stopBtn) stopBtn.disabled = !running;
+                if (topStop) topStop.disabled = !running;
+            } catch (e) {
+                console.error('loadMonitorStatus', e);
+            }
+        }
+
+        async function loadUsers() {
+            try {
+                const res = await fetchAPI(`/api/users?page=${usersPage}&per_page=50`);
+                const data = await res.json();
+                const tbody = document.getElementById('users-table');
+                if (usersPage === 1) tbody.innerHTML = '';
+                data.users.forEach(u => {
+                    tbody.innerHTML += `<tr>
+                        <td>${u.username ? '@' + u.username : '-'}</td>
+                        <td>${u.first_name || ''} ${u.last_name || ''}</td>
+                        <td>${u.user_id}</td>
+                        <td>${u.source || '-'}</td>
+                        <td>${u.source_type || 'member'}</td>
+                        <td>${u.collected_at || '-'}</td>
+                    </tr>`;
+                });
+            } catch (e) {}
+        }
+
+        function loadMoreUsers() {
+            usersPage++;
+            loadUsers();
+        }
+
+        function exportCSV() {
+            window.location.href = '/api/export/csv';
+        }
+
+        function exportTXT() {
+            window.location.href = '/api/export/txt';
+        }
+
+        async function clearData() {
+            if (!confirm('确定清空所有采集数据？此操作不可恢复！')) return;
+            await fetchAPI('/api/users/clear', {method: 'POST'});
+            alert('数据已清空');
+            loadStats();
+            usersPage = 1;
+            loadUsers();
+        }
+
+        // 退出登录
+        async function doLogout() {
+            await fetch('/api/logout', {method: 'POST'});
+            window.location.href = '/login.html';
+        }
+
+        // 初始化
+        loadStats();
+        loadAccounts();
+        setInterval(loadStats, 10000); // 每10秒刷新统计
+    
+        // 一键全部采集
+        async function scrapeAllGroups() {
+            const btn = document.getElementById('btn-scrape-all');
+            if (!btn) return;
+            btn.disabled = true;
+            btn.style.background = '#6b7280';
+            btn.textContent = '采集中...';
+            try {
+                const resp = await fetchAPI('/api/scrape/all', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mode: 'members'})
+                });
+                const data = await resp.json();
+                if (data.status === 'ok') {
+                    alert('采集完成！\n成功: ' + (data.success || 0) + ' 个群组\n失败: ' + (data.failed || 0) + ' 个群组\n新增用户: ' + (data.new_users || 0));
+                } else {
+                    alert('采集失败: ' + (data.message || '未知错误'));
+                }
+            } catch(e) {
+                alert('采集请求失败: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.style.background = '#10b981';
+                btn.textContent = '一键全部采集';
+                loadStats();
+            }
+        }
+
+        </script>
+</body>
+</html>
