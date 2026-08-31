@@ -644,7 +644,33 @@ async def _search_groups(keyword, acc_id=None):
         resp = await client(SearchRequest(q=keyword, limit=50))
         chats = list(getattr(resp, "chats", []) or [])
         peers = list(getattr(resp, "results", []) or [])
-        logger.info("关键词[%s] chats=%s results=%s", keyword, len(chats), len(peers))
+        logger.info("关键词[%s] contacts chats=%s results=%s", keyword, len(chats), len(peers))
+        if not chats and not peers:
+            try:
+                from telethon.tl.functions.messages import SearchGlobalRequest
+                from telethon.tl.types import InputMessagesFilterEmpty, InputPeerEmpty
+                g = await client(SearchGlobalRequest(
+                    q=keyword,
+                    filter=InputMessagesFilterEmpty(),
+                    min_date=None,
+                    max_date=None,
+                    offset_rate=0,
+                    offset_peer=InputPeerEmpty(),
+                    offset_id=0,
+                    limit=50,
+                ))
+                chats.extend(list(getattr(g, "chats", []) or []))
+                logger.info("关键词[%s] global chats=%s", keyword, len(getattr(g, "chats", []) or []))
+            except Exception as e:
+                logger.warning("SearchGlobal 失败: %s", e)
+        if not chats and not peers:
+            kw = keyword.lower()
+            async for d in client.iter_dialogs():
+                title = (d.name or "")
+                if kw in title.lower() and d.is_group or d.is_channel:
+                    if kw in title.lower():
+                        chats.append(d.entity)
+            logger.info("关键词[%s] dialog hits=%s", keyword, len(chats))
         seen = set()
         entities = []
         for ch in chats:
@@ -887,6 +913,25 @@ def _make_msg_handler(allowed_chat_ids):
     return msg_handler
 
 
+
+def _normalize_chat_ids(raw_ids):
+    s = set()
+    for i in raw_ids or []:
+        if i is None or i == "":
+            continue
+        s.add(i)
+        s.add(str(i))
+        try:
+            n = abs(int(str(i).replace("-100", "").lstrip("-")))
+        except Exception:
+            continue
+        s.add(n)
+        s.add(-n)
+        s.add(int("-100%d" % n))
+        s.add("-100%d" % n)
+        s.add(str(n))
+    return s
+
 async def _resolve_chat_ids(client, group_links):
     """把 @username / 链接 / 数字 id 解析成 chat_id 集合，失败的跳过"""
     ids = set()
@@ -964,7 +1009,7 @@ async def _start_monitor(account_ids, group_links):
         if not client:
             continue
         try:
-            allowed = await _resolve_chat_ids(client, group_links)
+            allowed = _normalize_chat_ids(await _resolve_chat_ids(client, group_links))
             join_h = _make_join_handler(allowed)
             msg_h = _make_msg_handler(allowed)
             client.add_event_handler(join_h, events.ChatAction)
