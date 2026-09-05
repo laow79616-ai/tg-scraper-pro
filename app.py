@@ -434,6 +434,87 @@ async def _check_account_status(acc_id):
 import re as _re_link
 from urllib.parse import unquote as _unquote_link
 
+
+
+_rr_index = 0
+FLOOD_FILE = os.path.join(DATA_DIR, "account_flood.json") if "DATA_DIR" in globals() else "/root/tg_scraper_pro/data/account_flood.json"
+
+def _load_flood_pool():
+    try:
+        data = load_json(FLOOD_FILE, {}) if "load_json" in globals() else {}
+        if not data:
+            import json
+            from pathlib import Path as _P
+            q = _P(FLOOD_FILE)
+            data = json.loads(q.read_text() or "{}") if q.exists() else {}
+        return {str(k): float(v) for k, v in (data or {}).items()}
+    except Exception:
+        return {}
+
+def _save_flood_pool(pool):
+    try:
+        if "save_json" in globals():
+            save_json(FLOOD_FILE, pool)
+        else:
+            import json
+            from pathlib import Path as _P
+            _P(FLOOD_FILE).write_text(json.dumps(pool, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning("保存冷库失败: %s", e)
+
+def _purge_expired_flood(pool=None):
+    import time
+    now = time.time()
+    pool = dict(pool or _load_flood_pool())
+    changed = False
+    for acc_id, until in list(pool.items()):
+        if float(until) <= now:
+            pool.pop(acc_id, None)
+            changed = True
+            logger.info("账号冷库到期，回到水军池: %s", acc_id)
+    if changed:
+        _save_flood_pool(pool)
+    return pool
+
+def _mark_flood(acc_id, seconds):
+    import time
+    if not acc_id:
+        return
+    sec = max(1, int(seconds or 0))
+    pool = _purge_expired_flood()
+    pool[str(acc_id)] = time.time() + sec
+    _save_flood_pool(pool)
+    logger.warning("账号进入冷库 %s，%s 秒后自动回到水军池", acc_id, sec)
+
+def _is_in_cold_pool(acc_id):
+    import time
+    pool = _purge_expired_flood()
+    return float(pool.get(str(acc_id), 0) or 0) > time.time()
+
+def _online_client_items():
+    items = []
+    st = globals().get("client_status") or {}
+    cli = globals().get("clients") or {}
+    for acc_id, client in cli.items():
+        if not client:
+            continue
+        if _is_in_cold_pool(acc_id):
+            continue
+        status = (st.get(acc_id) or {}).get("status")
+        if status and status != "online":
+            continue
+        items.append((acc_id, client))
+    return items
+
+def _next_working_client():
+    global _rr_index
+    items = _online_client_items()
+    if not items:
+        return None, None
+    acc_id, client = items[_rr_index % len(items)]
+    _rr_index += 1
+    return acc_id, client
+
 def parse_tg_link(raw: str):
     s = _unquote_link((raw or "").strip())
     if not s:
@@ -484,6 +565,61 @@ def _discovered_store():
     return None, None
 
 
+
+
+@app.route("/api/groups/from-links", methods=["POST"])
+def api_groups_from_links():
+    data = request.get_json(silent=True) or {}
+    raw_links = data.get("links") or data.get("link") or []
+    if isinstance(raw_links, str):
+        import re as _re
+        raw_links = [x for x in _re.split(r"[\s,，;；]+", raw_links) if x.strip()]
+    do_listen = bool(data.get("listen"))
+    results = []
+    stopped = None
+    for raw in raw_links:
+        raw = (raw or "").strip()
+        if not raw:
+            continue
+        acc_id, client = _next_working_client()
+        if not client:
+            results.append({"link": raw, "status": "error", "message": "没有可用账号"})
+            stopped = "没有可用账号"
+            break
+        try:
+            # 复用单条接口逻辑
+            with app.test_request_context(json={"link": raw, "listen": do_listen}):
+                resp = api_groups_from_link()
+            payload = resp.get_json() if hasattr(resp, "get_json") else resp
+            if not isinstance(payload, dict):
+                payload = {"status": "error", "message": str(payload)}
+            payload["link"] = raw
+            payload["account"] = acc_id
+            results.append(payload)
+            msg = str(payload.get("message") or "")
+            if "wait of" in msg.lower() or "FloodWait" in msg or "被限流" in msg:
+                import re as _re
+                m = _re.search(r"wait of (\d+) seconds", msg, _re.I)
+                sec = int(m.group(1)) if m else 300
+                _mark_flood(acc_id, min(sec, 600))
+                # 换号继续，不整批停；若所有号都限流再停
+                if not _online_client_items():
+                    stopped = msg
+                    break
+        except Exception as e:
+            err = str(e)
+            results.append({"link": raw, "status": "error", "message": err, "account": acc_id})
+            if "wait of" in err.lower() or "FloodWait" in err:
+                import re as _re
+                m = _re.search(r"wait of (\d+) seconds", err, _re.I)
+                _mark_flood(acc_id, int(m.group(1)) if m else 300)
+                if not _online_client_items():
+                    stopped = err
+                    break
+    ok = sum(1 for r in results if r.get("status") == "ok")
+    return jsonify({"status": "ok", "ok": ok, "fail": len(results) - ok, "stopped": stopped, "results": results})
+
+
 @app.route("/api/groups/from-link", methods=["POST"])
 def api_groups_from_link():
     data = request.get_json(silent=True) or {}
@@ -493,7 +629,7 @@ def api_groups_from_link():
     if not parsed:
         return jsonify({"status": "error", "message": "无法识别的链接或用户名"})
 
-    acc_id, client = _first_online_client()
+    acc_id, client = _next_working_client()
     if not client:
         return jsonify({"status": "error", "message": "没有在线账号，请先在账号管理里连接"})
 
@@ -707,6 +843,11 @@ async def _search_groups(keyword, acc_id=None):
                 "keyword": keyword,
             })
     except FloodWaitError as e:
+        try:
+            acc = locals().get('acc_id') or locals().get('account_id')
+            _mark_flood(acc, getattr(e, 'seconds', 300))
+        except Exception:
+            pass
         return {"status": "error", "message": "被限流，需等待 %s 秒" % e.seconds}
     except Exception as e:
         logger.exception("搜索失败")
@@ -805,12 +946,22 @@ async def _scrape_messages(group_link, limit=1000, acc_id=None):
                             "collected_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         }
             except FloodWaitError as e:
+                try:
+                    acc = locals().get('acc_id') or locals().get('account_id')
+                    _mark_flood(acc, getattr(e, 'seconds', 300))
+                except Exception:
+                    pass
                 wait_s = min(int(e.seconds) + 1, 120)
                 logger.warning("消息采集触发限流，等待 %s 秒", wait_s)
                 await asyncio.sleep(wait_s)
             await asyncio.sleep(0.08)
 
     except FloodWaitError as e:
+        try:
+            acc = locals().get('acc_id') or locals().get('account_id')
+            _mark_flood(acc, getattr(e, 'seconds', 300))
+        except Exception:
+            pass
         wait_s = min(int(e.seconds) + 1, 120)
         logger.warning("消息采集整体限流，等待 %s 秒后返回已采集数据", wait_s)
         await asyncio.sleep(wait_s)

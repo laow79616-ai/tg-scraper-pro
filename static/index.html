@@ -253,7 +253,7 @@
             <div class="section-title">关键词搜索群组</div>
             <div class="form-row">
                 <div class="form-group" style="flex:3;">
-                    <input type="text" id="search-keyword" placeholder="关键词，或 t.me/xxx、@username、t.me/+邀请码">
+                    <input type="text" id="search-keyword" placeholder="关键词，或多个 t.me 链接（空格/换行分隔）">
                 </div>
                 <div class="form-group" style="flex:0;">
                     <button class="btn btn-primary" onclick="searchGroups()" id="btn-search">搜索</button>
@@ -613,34 +613,38 @@
             if (/^[A-Za-z0-9_]{4,}$/.test(s)) return { kind: 'username', username: s };
             return null;
         }
+        function splitLinks(raw) {
+            return (raw || '').split(/[\s,，;；]+/).map(s => s.trim()).filter(Boolean);
+        }
+        function splitLinks(raw) {
+            return (raw || '').split(/[\s,，;；]+/).map(s => s.trim()).filter(Boolean);
+        }
         async function addGroupByLink(listen) {
             const input = document.getElementById('search-keyword');
-            const raw = (input.value || '').trim();
-            if (!parseTgLink(raw)) { alert('请输入 t.me 链接、邀请链接或 @username'); return; }
+            const items = splitLinks(input.value || '');
+            if (!items.length) { alert('请输入一个或多个 t.me / @username'); return; }
             const btn = document.getElementById(listen ? 'btn-add-listen' : 'btn-add-link');
-            const old = btn.textContent;
-            btn.disabled = true;
-            btn.textContent = listen ? '解析并监听中...' : '解析中...';
+            const old = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = listen ? '多号监听中...' : '多号添加中...'; }
             try {
-                const res = await fetch('/api/groups/from-link', {
+                const res = await fetch('/api/groups/from-links', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ link: raw, listen: !!listen, scrape: false })
+                    body: JSON.stringify({ links: items, listen: !!listen })
                 });
                 const data = await res.json();
-                if (data.status !== 'ok') { alert(data.message || '添加失败'); return; }
                 if (typeof loadGroups === 'function') await loadGroups();
-                else if (typeof renderDiscoveredGroups === 'function') renderDiscoveredGroups();
-                else if (typeof searchGroups === 'function') { /* keep list */ location.hash = '#groups'; }
-                alert(data.message || '已添加');
+                const fails = (data.results || []).filter(r => r.status !== 'ok').slice(0, 8)
+                    .map(r => (r.link || '') + ': ' + (r.message || ''));
+                alert('成功 ' + (data.ok || 0) + ' 个，失败 ' + (data.fail || 0) + ' 个'
+                    + (data.stopped ? '\n已停止: ' + data.stopped : '')
+                    + (fails.length ? '\n' + fails.join('\n') : ''));
             } catch (e) {
                 alert('请求失败: ' + e);
             } finally {
-                btn.disabled = false;
-                btn.textContent = old;
+                if (btn) { btn.disabled = false; btn.textContent = old; }
             }
         }
-
         async function searchGroups() {
             const keyword = document.getElementById('search-keyword').value.trim();
             if (!keyword) { alert('请输入关键词'); return; }
