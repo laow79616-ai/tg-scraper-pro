@@ -246,14 +246,16 @@
             <div id="pool-ip-wrap" style="display:none;">
                 <div style="font-weight:600;margin-bottom:6px;">IP池（每行一个代理）</div>
                 <textarea id="ip-pool-text" rows="5" placeholder="socks5://user:pass@host:port"></textarea>
+                <div id="ip-pool-list" style="margin-top:8px;"></div>
             </div>
             <div id="pool-api-wrap" style="display:none;">
                 <div style="font-weight:600;margin-bottom:6px;">API池（每行 api_id,api_hash）</div>
                 <textarea id="api-pool-text" rows="5" placeholder="123456,0123456789abcdef"></textarea>
+                <div id="api-pool-list" style="margin-top:8px;"></div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
                 <button class="btn" onclick="savePools()">保存</button>
-                <button class="btn btn-primary" id="btn-assign-one" onclick="assignCurrentPool()">一键分配当前池</button>
+                <button class="btn btn-primary" id="btn-assign-one" onclick="assignPools(currentPool||'api')">一键分配当前池</button>
                 <button class="btn btn-success" onclick="assignPools('both')">IP+API全部分配</button>
             </div>
         </div>
@@ -385,6 +387,11 @@
             <div class="form-group" style="margin-bottom:20px;">
                 <label>手机号（带区号）</label>
                 <input type="text" id="new-acc-phone" placeholder="+60196075456">
+                <label>指定IP（必选）</label>
+                <select id="new-acc-proxy" required>
+                    <option value="">请选择IP池中的代理</option>
+                </select>
+
             </div>
             <div style="display:flex; gap:10px;">
                 <button class="btn btn-primary" onclick="addAccount()">添加</button>
@@ -509,9 +516,10 @@
                 api_id: document.getElementById('new-acc-api-id').value,
                 api_hash: document.getElementById('new-acc-api-hash').value,
                 phone: document.getElementById('new-acc-phone').value,
+                proxy: (document.getElementById('new-acc-proxy')||{}).value || '',
             };
-            if (!data.phone) {
-                alert('请填写手机号');
+            if (!data.phone || !data.proxy) {
+                alert('请填写手机号并选择指定IP');
                 return;
             }
             await fetchAPI('/api/accounts', {
@@ -647,10 +655,14 @@
             try {
                 const res = await fetch('/api/groups/from-links', {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ links: items, listen: !!listen })
                 });
-                const data = await res.json();
+                const text = await res.text();
+                let data;
+                try { data = JSON.parse(text); }
+                catch (e) { throw new Error('接口未返回JSON，可能未登录或服务超时: ' + text.slice(0,80)); }
                 if (typeof loadGroups === 'function') await loadGroups();
                 const fails = (data.results || []).filter(r => r.status !== 'ok').slice(0, 8)
                     .map(r => (r.link || '') + ': ' + (r.message || ''));
@@ -988,25 +1000,37 @@
         
         async function loadPools() {
             try {
-                const ip = await (await fetch('/api/pools/ip')).json();
-                const api = await (await fetch('/api/pools/api')).json();
-                const ipEl = document.getElementById('ip-pool-text');
-                const apiEl = document.getElementById('api-pool-text');
-                if (ipEl) ipEl.value = (ip.items||[]).join('\n');
-                if (apiEl) apiEl.value = (api.items||[]).map(x => (x.api_id||x.apiId||'') + ',' + (x.api_hash||x.apiHash||'')).join('\n');
+                const ip = await (await fetch('/api/pools/ip', {credentials:'same-origin'})).json();
+                const api = await (await fetch('/api/pools/api', {credentials:'same-origin'})).json();
+                renderPoolLists(ip, api);
+                if (typeof fillProxySelect === 'function') fillProxySelect();
             } catch (e) { console.log(e); }
         }
         async function savePools() {
-            await fetch('/api/pools/ip', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text: document.getElementById('ip-pool-text').value})});
-            await fetch('/api/pools/api', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text: document.getElementById('api-pool-text').value})});
-            alert('池已保存');
+            const ip = (document.getElementById('ip-pool-text')||{}).value || '';
+            const api = (document.getElementById('api-pool-text')||{}).value || '';
+            try {
+                const r2 = await fetch('/api/pools/api', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text: api})});
+                const r1 = await fetch('/api/pools/ip', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text: ip})});
+                const d2 = await r2.json();
+                const d1 = await r1.json();
+                const ipEl=document.getElementById('ip-pool-text'); const apiEl=document.getElementById('api-pool-text');
+                if (ipEl) ipEl.value=''; if (apiEl) apiEl.value='';
+                await loadPools();
+                alert('已写入系统：IP ' + (d1.count||0) + ' 条，API ' + (d2.count||0) + ' 条');
+            } catch (e) {
+                alert('保存失败: ' + e);
+            }
         }
         async function assignPools(mode) {
-            await savePools();
-            const res = await fetch('/api/pools/assign', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({mode})});
-            const data = await res.json();
-            alert(data.status==='ok' ? ('已分配 '+data.changed+' 个账号') : (data.message||'分配失败'));
-            if (typeof loadAccounts==='function') loadAccounts();
+            try {
+                const res = await fetch('/api/pools/assign', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body: JSON.stringify({mode: mode})});
+                const data = await res.json();
+                alert(data.status==='ok' ? ('已分配给 '+data.changed+' 个账号') : ('分配失败: '+(data.message||JSON.stringify(data))));
+                if (typeof loadAccounts==='function') loadAccounts();
+            } catch (e) {
+                alert('分配请求失败: '+e);
+            }
         }
 
         document.addEventListener('DOMContentLoaded', loadPools);
@@ -1025,6 +1049,69 @@
         async function assignCurrentPool() {
             if (!currentPool) { alert('先点 IP池 或 API池'); return; }
             await assignPools(currentPool);
+        }
+
+
+        async function fillProxySelect() {
+            const sel = document.getElementById('new-acc-proxy');
+            if (!sel) return;
+            try {
+                const ip = await (await fetch('/api/pools/ip', {credentials:'same-origin'})).json();
+                const items = ip.items || [];
+                const cur = sel.value;
+                sel.innerHTML = '<option value="">请选择IP池中的代理</option>';
+                items.forEach((x,i) => {
+                    const opt = document.createElement('option');
+                    opt.value = x;
+                    opt.textContent = (i+1) + '. ' + x;
+                    sel.appendChild(opt);
+                });
+                if (cur) sel.value = cur;
+                if (!items.length) {
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = 'IP池为空，先到IP池保存';
+                    sel.appendChild(opt);
+                }
+            } catch (e) { console.log(e); }
+        }
+        const _oldToggle = window.togglePool;
+        window.togglePool = function(kind) {
+            if (_oldToggle) _oldToggle(kind);
+            fillProxySelect();
+        };
+        document.addEventListener('DOMContentLoaded', fillProxySelect);
+
+
+        function renderPoolLists(ip, api) {
+            const ipBox = document.getElementById('ip-pool-list');
+            const apiBox = document.getElementById('api-pool-list');
+            if (ipBox) {
+                const items = (ip && ip.items) || [];
+                ipBox.innerHTML = items.length ? items.map(x =>
+                    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #eee;border-radius:8px;margin-bottom:6px;font-size:12px;word-break:break-all;">'
+                    + '<span>' + x.replace(/</g,'&lt;') + '</span>'
+                    + '<button class="btn btn-danger btn-sm" onclick="deleteIp(\'' + x.replace(/'/g, '') + '\')">删除</button></div>'
+                ).join('') : '<div style="color:#888;font-size:12px;">系统中暂无IP</div>';
+            }
+            if (apiBox) {
+                const items = (api && api.items) || [];
+                apiBox.innerHTML = items.length ? items.map(x =>
+                    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #eee;border-radius:8px;margin-bottom:6px;font-size:12px;">'
+                    + '<span>API ' + (x.api_id||'') + '</span>'
+                    + '<button class="btn btn-danger btn-sm" onclick="deleteApi(\'' + (x.api_id||'') + '\')">删除</button></div>'
+                ).join('') : '<div style="color:#888;font-size:12px;">系统中暂无API</div>';
+            }
+        }
+        async function deleteIp(value) {
+            if (!confirm('删除这条IP？')) return;
+            await fetch('/api/pools/ip/delete', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body: JSON.stringify({value})});
+            loadPools(); fillProxySelect && fillProxySelect();
+        }
+        async function deleteApi(api_id) {
+            if (!confirm('删除 API ' + api_id + '？')) return;
+            await fetch('/api/pools/api/delete', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body: JSON.stringify({api_id})});
+            loadPools();
         }
 
 </script>

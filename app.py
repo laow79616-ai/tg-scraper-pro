@@ -309,7 +309,7 @@ def save_monitor_config(config):
 async def _connect_account(account):
     """连接单个账号（支持可选 proxy 字段）"""
     acc_id = account["id"]
-    api_id = int(account["api_id"])
+    api_id = int(str(account.get("api_id") or "0"))
     api_hash = account["api_hash"]
     phone = account["phone"]
     session_file = os.path.join(DATA_DIR, f"session_{acc_id}")
@@ -328,9 +328,10 @@ async def _connect_account(account):
         session_file,
         api_id,
         api_hash,
-        proxy=proxy,
-        connection_retries=5,
-        retry_delay=3,
+        proxy=_telethon_proxy(account.get("proxy") or proxy),
+        timeout=30,
+        connection_retries=2,
+        retry_delay=2,
         auto_reconnect=True,
         request_retries=3,
     )
@@ -550,6 +551,30 @@ def _next_working_client():
     _rr_index += 1
     return acc_id, client
 
+
+def _telethon_proxy(proxy):
+    s = (proxy or "").strip()
+    if not s:
+        return None
+    from urllib.parse import urlparse, unquote
+    if "://" not in s and s.count(":") >= 3:
+        host, port, user, pwd = s.split(":", 3)
+        port = int(port)
+    else:
+        u = urlparse(s)
+        host, port = u.hostname, int(u.port or 1080)
+        user = unquote(u.username) if u.username else None
+        pwd = unquote(u.password) if u.password else None
+    return {
+        "proxy_type": "socks5",
+        "addr": host,
+        "port": port,
+        "username": user,
+        "password": pwd,
+        "rdns": True,
+    }
+
+
 def parse_tg_link(raw: str):
     s = _unquote_link((raw or "").strip())
     if not s:
@@ -603,6 +628,22 @@ def _discovered_store():
 
 
 @app.route("/api/groups/from-links", methods=["POST"])
+
+def _group_exists(raw):
+    s = (raw or "").strip()
+    if not s:
+        return None
+    key = s.lower().replace("https://t.me/", "").replace("http://t.me/", "").replace("t.me/", "").lstrip("@").strip("/")
+    groups = load_groups()
+    for g in groups:
+        u = str(g.get("username") or "").lower().lstrip("@")
+        link = str(g.get("link") or "").lower()
+        gid = str(g.get("id") or "")
+        if key and (key == u or key in link or key == gid):
+            return g
+    return None
+
+@app.route("/api/groups/from-links", methods=["POST"])
 def api_groups_from_links():
     data = request.get_json(silent=True) or {}
     raw_links = data.get("links") or data.get("link") or []
@@ -615,6 +656,10 @@ def api_groups_from_links():
     for raw in raw_links:
         raw = (raw or "").strip()
         if not raw:
+            continue
+        existed = _group_exists(raw)
+        if existed:
+            results.append({"link": raw, "status": "ok", "message": "已存在，已跳过", "group": existed.get("username") or existed.get("title")})
             continue
         acc_id, client = _next_working_client()
         if not client:
@@ -654,6 +699,10 @@ def api_groups_from_links():
     ok = sum(1 for r in results if r.get("status") == "ok")
     return jsonify({"status": "ok", "ok": ok, "fail": len(results) - ok, "stopped": stopped, "results": results})
 
+
+@app.route("/api/groups/from-link", methods=["POST"])
+def _from_link_dedupe_gate():
+    return None
 
 @app.route("/api/groups/from-link", methods=["POST"])
 def api_groups_from_link():
@@ -1338,6 +1387,20 @@ def index():
 IP_POOL_FILE = os.path.join(DATA_DIR, "ip_pool.json")
 API_POOL_FILE = os.path.join(DATA_DIR, "api_pool.json")
 
+
+def _normalize_proxy(s):
+    s = (s or "").strip()
+    if not s:
+        return ""
+    if s.startswith("socks5://") or s.startswith("socks4://") or s.startswith("http://"):
+        return s
+    parts = s.split(":")
+    if len(parts) >= 4:
+        host, port, user = parts[0], parts[1], parts[2]
+        pwd = ":".join(parts[3:])
+        return f"socks5://{user}:{pwd}@{host}:{port}"
+    return s
+
 def load_ip_pool():
     d = load_json(IP_POOL_FILE, {"items": []})
     if isinstance(d, list):
@@ -1346,6 +1409,24 @@ def load_ip_pool():
 
 def save_ip_pool(d):
     save_json(IP_POOL_FILE, d)
+
+
+def _auto_assign_api(account, accounts=None):
+    if str(account.get("api_id") or "").strip() and str(account.get("api_hash") or "").strip():
+        return account
+    pool = load_api_pool().get("items") or []
+    if not pool:
+        return account
+    accounts = accounts if accounts is not None else load_accounts()
+    idx = 0
+    for i, a in enumerate(accounts):
+        if a.get("id") == account.get("id"):
+            idx = i
+            break
+    pair = pool[idx % len(pool)]
+    account["api_id"] = str(pair.get("api_id") or "")
+    account["api_hash"] = str(pair.get("api_hash") or "")
+    return account
 
 def load_api_pool():
     d = load_json(API_POOL_FILE, {"items": []})
@@ -1366,6 +1447,14 @@ def api_ip_pool():
         items = [x.strip() for x in raw.splitlines() if x.strip() and not x.strip().startswith("#")]
     else:
         items = [str(x).strip() for x in raw if str(x).strip()]
+    norm = []
+    seen = set()
+    for x in items:
+        v = _normalize_proxy(x)
+        if v and v not in seen:
+            seen.add(v)
+            norm.append(v)
+    items = norm
     save_ip_pool({"items": items})
     return jsonify({"status": "ok", "count": len(items)})
 
@@ -1374,21 +1463,65 @@ def api_api_pool():
     if request.method == "GET":
         return jsonify(load_api_pool())
     data = request.get_json(silent=True) or {}
-    raw = data.get("text") or data.get("items") or ""
+    raw = data.get("text")
+    if raw is None:
+        raw = data.get("items")
+    if raw is None:
+        raw = request.data.decode("utf-8", "ignore") if request.data else ""
+    logger.info("API池保存原始数据: %s", str(raw)[:300])
+    lines = raw.splitlines() if isinstance(raw, str) else list(raw or [])
     items = []
-    lines = raw.splitlines() if isinstance(raw, str) else raw
     for line in lines:
         s = str(line).strip()
         if not s or s.startswith("#"):
             continue
-        # 支持: api_id,api_hash  或 api_id api_hash
-        parts = [x.strip() for x in s.replace("\t", " ").replace("，", ",").split(",") if x.strip()]
-        if len(parts) == 1:
-            parts = s.split()
-        if len(parts) >= 2:
-            items.append({"api_id": parts[0], "api_hash": parts[1]})
+        s = s.replace("，", ",").replace("\t", " ")
+        api_id, api_hash = "", ""
+        if "," in s:
+            a,b = s.split(",", 1)
+            api_id, api_hash = a.strip(), b.strip()
+        elif "-" in s and s.split("-",1)[0].strip().isdigit():
+            a,b = s.split("-", 1)
+            api_id, api_hash = a.strip(), b.strip()
+        else:
+            ps = s.split()
+            if len(ps) >= 2:
+                api_id, api_hash = ps[0], ps[1]
+        if api_id.isdigit() and api_hash:
+            items.append({"api_id": api_id, "api_hash": api_hash})
+    if not items:
+        cur = load_api_pool().get("items") or []
+        logger.warning("API池收到空保存，已忽略，保留 %s 条", len(cur))
+        return jsonify({"status": "ok", "count": len(cur), "items": cur, "kept": True})
+    # 追加去重，不整表覆盖
+    cur = load_api_pool().get("items") or []
+    have = {str(x.get("api_id")) for x in cur}
+    for x in items:
+        if str(x.get("api_id")) not in have:
+            cur.append(x); have.add(str(x.get("api_id")))
+    save_api_pool({"items": cur})
+    logger.info("API池已保存 %s 条 -> %s", len(cur), API_POOL_FILE)
+    return jsonify({"status": "ok", "count": len(cur), "items": cur})
+
+
+
+@app.route("/api/pools/ip/delete", methods=["POST"])
+def api_ip_pool_delete():
+    data = request.get_json(silent=True) or {}
+    val = str(data.get("value") or "").strip()
+    d = load_ip_pool()
+    items = [x for x in (d.get("items") or []) if str(x).strip() != val]
+    save_ip_pool({"items": items})
+    return jsonify({"status": "ok", "count": len(items), "items": items})
+
+@app.route("/api/pools/api/delete", methods=["POST"])
+def api_api_pool_delete():
+    data = request.get_json(silent=True) or {}
+    api_id = str(data.get("api_id") or "").strip()
+    d = load_api_pool()
+    items = [x for x in (d.get("items") or []) if str(x.get("api_id")) != api_id]
     save_api_pool({"items": items})
-    return jsonify({"status": "ok", "count": len(items)})
+    return jsonify({"status": "ok", "count": len(items), "items": items})
 
 @app.route("/api/pools/assign", methods=["POST"])
 def api_pools_assign():
@@ -1441,6 +1574,16 @@ def add_account():
     }
     if not account["phone"]:
         return jsonify({"status": "error", "message": "手机号必填"}), 400
+    if not str(account.get("proxy") or "").strip():
+        return jsonify({"status": "error", "message": "必须选择指定IP"}), 400
+    if not str(account.get("api_id") or "").strip() or not str(account.get("api_hash") or "").strip():
+        pool = load_api_pool().get("items") or []
+        if not pool:
+            return jsonify({"status": "error", "message": "API池为空，请先保存API"}), 400
+        # 按已有账号数量轮询
+        pair = pool[len(accounts) % len(pool)]
+        account["api_id"] = str(pair.get("api_id") or "")
+        account["api_hash"] = str(pair.get("api_hash") or "")
     accounts.append(account)
     save_accounts(accounts)
     return jsonify({"status": "ok", "account": account})
