@@ -471,9 +471,36 @@ def _purge_expired_flood(pool=None):
         if float(until) <= now:
             pool.pop(acc_id, None)
             changed = True
-            logger.info("账号冷库到期，回到水军池: %s", acc_id)
+            st = globals().get("client_status") or {}
+            info = dict(st.get(acc_id) or {})
+            if info.get("cold") or info.get("status") == "offline":
+                # 客户端仍在则拉回上线，否则保持离线等自动重连逻辑
+                cli = (globals().get("clients") or {}).get(acc_id)
+                info["cold"] = False
+                info.pop("cold_until", None)
+                info.pop("cold_reason", None)
+                info["status"] = "online" if cli else info.get("status") or "offline"
+                st[acc_id] = info
+            logger.info("账号冷库到期，自动上线回到水军池: %s", acc_id)
     if changed:
         _save_flood_pool(pool)
+    return pool
+
+
+def _apply_flood_status():
+    import time
+    pool = _purge_expired_flood()
+    now = time.time()
+    st = globals().get("client_status") or {}
+    for acc_id, until in pool.items():
+        if float(until) <= now:
+            continue
+        info = dict(st.get(acc_id) or {})
+        info["status"] = "offline"
+        info["cold"] = True
+        info["cold_until"] = float(until)
+        info["cold_reason"] = "FloodWait"
+        st[acc_id] = info
     return pool
 
 def _mark_flood(acc_id, seconds):
@@ -481,10 +508,18 @@ def _mark_flood(acc_id, seconds):
     if not acc_id:
         return
     sec = max(1, int(seconds or 0))
+    sec = min(sec, 172800)
     pool = _purge_expired_flood()
     pool[str(acc_id)] = time.time() + sec
     _save_flood_pool(pool)
-    logger.warning("账号进入冷库 %s，%s 秒后自动回到水军池", acc_id, sec)
+    st = globals().get("client_status") or {}
+    info = dict(st.get(acc_id) or {})
+    info["status"] = "offline"
+    info["cold"] = True
+    info["cold_until"] = pool[str(acc_id)]
+    info["cold_reason"] = "FloodWait"
+    st[acc_id] = info
+    logger.warning("账号进入冷库并下线 %s，%s 秒后自动上线", acc_id, sec)
 
 def _is_in_cold_pool(acc_id):
     import time
@@ -601,7 +636,7 @@ def api_groups_from_links():
                 import re as _re
                 m = _re.search(r"wait of (\d+) seconds", msg, _re.I)
                 sec = int(m.group(1)) if m else 300
-                _mark_flood(acc_id, min(sec, 600))
+                _mark_flood(acc_id, min(max(1, int(sec)), 172800))
                 # 换号继续，不整批停；若所有号都限流再停
                 if not _online_client_items():
                     stopped = msg
@@ -1298,6 +1333,87 @@ def index():
 
 
 # --- 账号管理 ---
+
+
+IP_POOL_FILE = os.path.join(DATA_DIR, "ip_pool.json")
+API_POOL_FILE = os.path.join(DATA_DIR, "api_pool.json")
+
+def load_ip_pool():
+    d = load_json(IP_POOL_FILE, {"items": []})
+    if isinstance(d, list):
+        d = {"items": d}
+    return d
+
+def save_ip_pool(d):
+    save_json(IP_POOL_FILE, d)
+
+def load_api_pool():
+    d = load_json(API_POOL_FILE, {"items": []})
+    if isinstance(d, list):
+        d = {"items": d}
+    return d
+
+def save_api_pool(d):
+    save_json(API_POOL_FILE, d)
+
+@app.route("/api/pools/ip", methods=["GET", "POST"])
+def api_ip_pool():
+    if request.method == "GET":
+        return jsonify(load_ip_pool())
+    data = request.get_json(silent=True) or {}
+    raw = data.get("text") or data.get("items") or ""
+    if isinstance(raw, str):
+        items = [x.strip() for x in raw.splitlines() if x.strip() and not x.strip().startswith("#")]
+    else:
+        items = [str(x).strip() for x in raw if str(x).strip()]
+    save_ip_pool({"items": items})
+    return jsonify({"status": "ok", "count": len(items)})
+
+@app.route("/api/pools/api", methods=["GET", "POST"])
+def api_api_pool():
+    if request.method == "GET":
+        return jsonify(load_api_pool())
+    data = request.get_json(silent=True) or {}
+    raw = data.get("text") or data.get("items") or ""
+    items = []
+    lines = raw.splitlines() if isinstance(raw, str) else raw
+    for line in lines:
+        s = str(line).strip()
+        if not s or s.startswith("#"):
+            continue
+        # 支持: api_id,api_hash  或 api_id api_hash
+        parts = [x.strip() for x in s.replace("\t", " ").replace("，", ",").split(",") if x.strip()]
+        if len(parts) == 1:
+            parts = s.split()
+        if len(parts) >= 2:
+            items.append({"api_id": parts[0], "api_hash": parts[1]})
+    save_api_pool({"items": items})
+    return jsonify({"status": "ok", "count": len(items)})
+
+@app.route("/api/pools/assign", methods=["POST"])
+def api_pools_assign():
+    data = request.get_json(silent=True) or {}
+    mode = data.get("mode") or "both"  # ip / api / both
+    accounts = load_accounts()
+    ip_items = load_ip_pool().get("items") or []
+    api_items = load_api_pool().get("items") or []
+    if mode in ("ip", "both") and not ip_items:
+        return jsonify({"status": "error", "message": "IP池为空"}), 400
+    if mode in ("api", "both") and not api_items:
+        return jsonify({"status": "error", "message": "API池为空"}), 400
+    changed = 0
+    for i, acc in enumerate(accounts):
+        if mode in ("ip", "both"):
+            acc["proxy"] = ip_items[i % len(ip_items)]
+        if mode in ("api", "both"):
+            pair = api_items[i % len(api_items)]
+            acc["api_id"] = str(pair.get("api_id") or "").strip()
+            acc["api_hash"] = str(pair.get("api_hash") or "").strip()
+        changed += 1
+    save_accounts(accounts)
+    return jsonify({"status": "ok", "changed": changed, "mode": mode, "need_reconnect": mode in ("api", "both", "ip")})
+
+
 @app.route("/api/accounts", methods=["GET"])
 def get_accounts():
     accounts = load_accounts()
@@ -1323,8 +1439,8 @@ def add_account():
         "proxy": str(data.get("proxy", "")).strip(),  # 可选 socks5://host:port
         "added_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
-    if not account["api_id"] or not account["api_hash"] or not account["phone"]:
-        return jsonify({"status": "error", "message": "api_id / api_hash / phone 均为必填"}), 400
+    if not account["phone"]:
+        return jsonify({"status": "error", "message": "手机号必填"}), 400
     accounts.append(account)
     save_accounts(accounts)
     return jsonify({"status": "ok", "account": account})
@@ -1587,7 +1703,8 @@ def get_stats():
     users = load_users_data()
     groups = load_groups()
     tasks_count = get_tasks_count()  # 只获取计数，不加载完整文件
-    online_count = sum(1 for s in client_status.values() if s.get("status") == "online")
+    _apply_flood_status()
+    online_count = sum(1 for acc_id, s in client_status.items() if s.get("status") == "online" and not _is_in_cold_pool(acc_id))
     total_accounts = len(load_accounts())
 
     _stats_cache = {
@@ -1683,6 +1800,7 @@ def auto_connect_on_startup():
             except Exception as e:
                 print(f"  自动连接 {account.get('phone')} 失败: {e}")
             time.sleep(2)  # 每个账号间隔2秒
+        _apply_flood_status()
         # 自动恢复24H监听
         try:
             monitor_config = load_monitor_config()
