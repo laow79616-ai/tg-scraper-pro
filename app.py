@@ -438,7 +438,8 @@ from urllib.parse import unquote as _unquote_link
 
 
 _rr_index = 0
-FLOOD_FILE = os.path.join(DATA_DIR, "account_flood.json") if "DATA_DIR" in globals() else "/root/tg_scraper_pro/data/account_flood.json"
+FLOOD_FILE = os.path.join(DATA_DIR, "account_flood.json")
+LINK_ADD_INTERVAL = 12
 
 def _load_flood_pool():
     try:
@@ -627,7 +628,6 @@ def _discovered_store():
 
 
 
-@app.route("/api/groups/from-links", methods=["POST"])
 
 def _group_exists(raw):
     s = (raw or "").strip()
@@ -653,6 +653,8 @@ def api_groups_from_links():
     do_listen = bool(data.get("listen"))
     results = []
     stopped = None
+    if not _online_client_items():
+        return jsonify({"status": "error", "message": "全部水军号都在冷却池，到期后才会回到工作池，暂停添加链接"})
     for raw in raw_links:
         raw = (raw or "").strip()
         if not raw:
@@ -677,6 +679,16 @@ def api_groups_from_links():
             payload["account"] = acc_id
             results.append(payload)
             msg = str(payload.get("message") or "")
+            if payload.get("status") != "ok" and ("限流" in msg or "冷却" in msg):
+                try:
+                    _mark_flood(acc_id, 3600)
+                except Exception:
+                    pass
+                continue
+            if payload.get("status") == "ok" and "已存在" not in msg:
+                import time as _t
+                _t.sleep(LINK_ADD_INTERVAL)
+            msg = str(payload.get("message") or "")
             if "wait of" in msg.lower() or "FloodWait" in msg or "被限流" in msg:
                 import re as _re
                 m = _re.search(r"wait of (\d+) seconds", msg, _re.I)
@@ -700,9 +712,6 @@ def api_groups_from_links():
     return jsonify({"status": "ok", "ok": ok, "fail": len(results) - ok, "stopped": stopped, "results": results})
 
 
-@app.route("/api/groups/from-link", methods=["POST"])
-def _from_link_dedupe_gate():
-    return None
 
 @app.route("/api/groups/from-link", methods=["POST"])
 def api_groups_from_link():
@@ -946,32 +955,22 @@ async def _search_groups(keyword, acc_id=None):
     return {"status": "ok", "count": len(results), "groups": results}
 
 # ============ 成员采集 ============
-async def _scrape_members(group_link, acc_id=None):
-    """采集群组成员列表"""
+async def _scrape_members(group_link, acc_id=None, max_members=300):
+    """采集群组成员：每群上限、边采边存、超时保留已采"""
     client = await _get_working_client(acc_id)
     if not client:
         return {"status": "error", "message": "没有可用的在线账号"}
-
     try:
         entity = await client.get_entity(group_link)
-    except ChannelPrivateError:
-        return {"status": "error", "message": "频道/群组为私有，无法访问"}
     except Exception as e:
         return {"status": "error", "message": f"无法获取群组: {str(e)}"}
-
     members = []
-    flood_hits = 0
     try:
-        seen = set()
         async for user in client.iter_participants(entity):
-            if getattr(user, "bot", False) or getattr(user, "deleted", False):
+            if getattr(user, "bot", False):
                 continue
-            uid = str(user.id)
-            if uid in seen:
-                continue
-            seen.add(uid)
-            members.append({
-                "user_id": uid,
+            user_info = {
+                "user_id": str(user.id),
                 "username": user.username or "",
                 "first_name": user.first_name or "",
                 "last_name": user.last_name or "",
@@ -980,21 +979,27 @@ async def _scrape_members(group_link, acc_id=None):
                 "source": group_link,
                 "source_type": "member",
                 "collected_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            })
-            if len(members) % 200 == 0:
+            }
+            members.append(user_info)
+            if len(members) % 50 == 0:
+                _save_collected_users(members[-50:])
                 logger.info("成员采集中 %s: %s", group_link, len(members))
-                await asyncio.sleep(0.3)
-    except ChatAdminRequiredError:
-        return {"status": "error", "message": "需要管理员权限才能获取成员列表"}
+            if len(members) >= max_members:
+                break
+            if len(members) % 80 == 0:
+                await asyncio.sleep(0.4)
     except Exception as e:
         if not members:
             return {"status": "error", "message": str(e)}
-        logger.warning("成员采集部分失败: %s", e)
-
-    # 保存用户数据
-    added = _save_collected_users(members)
-    return {"status": "ok", "count": len(members), "added": added, "flood_hits": flood_hits}
-
+        logger.warning("成员采集部分失败 %s: %s", group_link, e)
+    if members:
+        rem = len(members) % 50
+        if rem:
+            _save_collected_users(members[-rem:])
+        else:
+            _save_collected_users(members[-50:] if members else [])
+    added = len(members)
+    return {"status": "ok", "count": len(members), "added": added}
 
 # ============ 消息采集模式 ============
 async def _scrape_messages(group_link, limit=1000, acc_id=None):
@@ -1440,25 +1445,60 @@ def save_api_pool(d):
 @app.route("/api/pools/ip", methods=["GET", "POST"])
 def api_ip_pool():
     if request.method == "GET":
-        return jsonify(load_ip_pool())
-    data = request.get_json(silent=True) or {}
-    raw = data.get("text") or data.get("items") or ""
-    if isinstance(raw, str):
-        items = [x.strip() for x in raw.splitlines() if x.strip() and not x.strip().startswith("#")]
-    else:
-        items = [str(x).strip() for x in raw if str(x).strip()]
-    norm = []
-    seen = set()
-    for x in items:
-        v = _normalize_proxy(x)
-        if v and v not in seen:
-            seen.add(v)
-            norm.append(v)
-    items = norm
-    save_ip_pool({"items": items})
-    return jsonify({"status": "ok", "count": len(items)})
+        data = load_ip_pool()
+        items = data.get("items") if isinstance(data, dict) else data
+        grouped = {}
+        for x in (items or []):
+            if isinstance(x, dict):
+                proxy = _normalize_proxy(x.get("proxy") or x.get("ip") or x.get("text") or "")
+                ids = list(x.get("account_ids") or x.get("accounts") or [])
+                if x.get("acc_id"):
+                    ids.append(x.get("acc_id"))
+            else:
+                proxy = _normalize_proxy(str(x))
+                ids = []
+            if not proxy:
+                continue
+            grouped.setdefault(proxy, [])
+            for i in ids:
+                i = str(i or "").strip()
+                if i and i not in grouped[proxy]:
+                    grouped[proxy].append(i)
+        norm = [{"ip": k, "proxy": k, "account_ids": v, "acc_id": (v[0] if v else "")} for k, v in grouped.items()]
+        return jsonify({"status": "ok", "items": norm})
+    body = request.json or {}
+    raw = body.get("items") or body.get("binds") or body.get("data") or []
+    out = []
+    for x in raw:
+        if isinstance(x, dict):
+            proxy = _normalize_proxy(x.get("proxy") or x.get("ip") or x.get("text") or "")
+            ids = list(x.get("account_ids") or x.get("accounts") or [])
+            if x.get("acc_id"):
+                ids.append(x.get("acc_id"))
+        else:
+            proxy = _normalize_proxy(str(x))
+            ids = []
+        ids = [str(i).strip() for i in ids if str(i).strip()]
+        if proxy:
+            out.append({"proxy": proxy, "ip": proxy, "account_ids": ids, "acc_id": ids[0] if ids else ""})
+    save_ip_pool({"items": out})
+    return jsonify({"status": "ok", "message": f"已绑定 {len(out)} 条 IP", "count": len(out), "items": out})
+
 
 @app.route("/api/pools/api", methods=["GET", "POST"])
+
+def _parse_api_line(line):
+    s = str(line or "").strip()
+    if not s:
+        return None
+    parts = [x for x in __import__("re").split(r"[\s,;]+", s) if x]
+    if len(parts) == 1 and "-" in parts[0] and parts[0].split("-", 1)[0].isdigit():
+        a, b = parts[0].split("-", 1)
+        parts = [a, b]
+    if len(parts) >= 2:
+        return {"api_id": parts[0].strip(), "api_hash": parts[1].strip()}
+    return None
+
 def api_api_pool():
     if request.method == "GET":
         return jsonify(load_api_pool())
@@ -1559,6 +1599,32 @@ def get_accounts():
 
 
 @app.route("/api/accounts", methods=["POST"])
+
+def _pick_api_from_pool(accounts):
+    """1条API最多配5个水军，优先用得最少的"""
+    pool = load_api_pool() if "load_api_pool" in globals() else {"items": []}
+    items = pool.get("items") if isinstance(pool, dict) else pool
+    pairs = []
+    for x in (items or []):
+        if isinstance(x, dict):
+            aid = str(x.get("api_id") or "").strip()
+            ah = str(x.get("api_hash") or "").strip()
+        else:
+            continue
+        if aid and ah:
+            pairs.append((aid, ah))
+    if not pairs:
+        return None
+    used = {}
+    for a in accounts or []:
+        k = str(a.get("api_id") or "")
+        used[k] = used.get(k, 0) + 1
+    free = [(aid, ah, used.get(aid, 0)) for aid, ah in pairs if used.get(aid, 0) < 5]
+    if not free:
+        return None
+    free.sort(key=lambda x: x[2])
+    return {"api_id": free[0][0], "api_hash": free[0][1], "used": free[0][2]}
+
 def add_account():
     data = request.json or {}
     accounts = load_accounts()
