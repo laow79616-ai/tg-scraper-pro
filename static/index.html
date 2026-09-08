@@ -240,8 +240,9 @@
             <div class="stat-card"><div class="number green" id="stat-usernames">0</div><div class="label">有效用户名</div></div>
             <div class="stat-card"><div class="number orange" id="stat-groups">0</div><div class="label">已发现群组</div></div>
             <div class="stat-card"><div class="number purple" id="stat-accounts">0</div><div class="label">在线账号</div></div>
-            <div class="stat-card"><div class="number red" id="stat-tasks">0</div><div class="label">采集任务</div></div>
+            <div class="stat-card"><div class="number red" id="stat-tasks">0</div><div class="label">采集任务</div></div><div class="stat-card"><div class="number red" id="stat-api-pool">0</div><div class="label">API池</div></div><div class="stat-card"><div class="number red" id="stat-ip-pool">0</div><div class="label">IP池</div></div>
         </div>
+
 
         <!-- 标签页 -->
         <div class="tabs">
@@ -289,9 +290,28 @@
         <div class="tab-content" id="tab-api">
             <div class="section-title">API 池</div>
             <div style="font-size:13px;color:#6b7280;margin:0 0 8px;">规则：添加水军时自动从本池分配 API；1 条 API 最多匹配 5 个水军。每行一条：api_id,api_hash</div>
-            <textarea id="api-pool-text" style="width:100%;min-height:200px;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-family:monospace;"></textarea>
+            <textarea id="api-pool-text" style="width:100%;min-height:200px;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-family:monospace;">36477774,3202ce7116b2df1cc1c8a21fd52ebeff
+38611167,8a7b2511678a9274fb2641caf16921cc
+32546558,920b985d91af200a2f1128da6ca464ab
+39819177,a8db0f1dcfe180bd6255a3238609d317
+37469924,77a8e05974d87f51add165e35115d673
+37127925,0d12abd5e021226cfde0a6a4bd18f2eb
+35429503,ed7723903eedb2a8b4d247e9d85b0c06
+37721187,ae1aa1f07bca20085e5ccebb3df23330
+33835697,c1b2165b8292e093a5cf46006e72ce6e
+30548968,bbe4acf228f7d9d363acb897c4737dd9
+32497931,d994f1c8fe0214a78a34c088837f286e
+30853115,2eb63c744c613d8806232ce34053aacc
+36806619,8a488411a892e7374bc51e92563f3873
+38493322,212fe93cb67edf9b3853b9aacfdf0e0f
+37835426,9985258fb3a6f44a9f46fcc648d50ce6
+35255293,020da6b9a8e4b1745cc54ef7480690db
+34790522,bd53df92093cb8a0767d500570f06c66
+33209857,f7aa1cdf77060f9c4ce74111419fad09
+35546389,63fac22ae1a386c11ef8395ad3a2fbe9
+32411051,727de78b972abbf1edc0488f922dda0d</textarea>
             <div style="margin:10px 0 18px;">
-                <button class="btn btn-primary" onclick="window.__dumpApiPool();return false;">保存 API 池</button>
+                <button class="btn btn-primary" onclick="setPoolCard('stat-api-pool', (items&&items.length)||0); window.__dumpApiPool();return false;">保存 API 池</button>
             <div id="api-pool-result" style="display:none" style="margin-top:14px;"></div>
             </div>
             <div class="section-title">使用这些 API 的水军</div>
@@ -347,7 +367,21 @@
             </div>
         </div>
 
-        <!-- 24H监听 -->
+        
+        <div id="page-pools" class="page" style="display:none;">
+            <div class="section-title">资源池</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div class="card">
+                    <div class="section-title">API 池 <span id="pool-api-count"></span></div>
+                    <div id="pool-api-box" style="font-size:13px;"></div>
+                </div>
+                <div class="card">
+                    <div class="section-title">IP 池 <span id="pool-ip-count"></span></div>
+                    <div id="pool-ip-box" style="font-size:13px;"></div>
+                </div>
+            </div>
+        </div>
+<!-- 24H监听 -->
         <div class="tab-content" id="tab-monitor">
             <div class="section-title">24小时实时监听</div>
             <div class="help-text" style="color:#666;font-size:13px;margin:8px 0 16px;">
@@ -691,7 +725,7 @@
                 const modal=document.getElementById('add-account-modal')||document.getElementById('modal-add-account');
                 if(modal) modal.style.display='none';
                 if(typeof loadAccounts==='function') loadAccounts();
-                if(typeof loadStats==='function') loadStats();
+                if(typeof loadStats==='function') loadStats();loadPoolStats();
             }catch(e){
                 alert('添加失败: '+e.message);
             }
@@ -1619,6 +1653,107 @@
             if(tab && /API/.test(tab.textContent||'')) setTimeout(loadApiPoolAccounts, 50);
         });
 
+        
+        async function loadPoolStats(){
+            async function cnt(urls){
+                for(const u of urls){
+                    try{
+                        const r=await fetchAPI(u);
+                        const d=await r.json();
+                        const items=d.items||d.data||d.list||d.ips||d.proxies||(Array.isArray(d)?d:[]);
+                        if(Array.isArray(items)) return items.length;
+                        if(typeof d.count==='number') return d.count;
+                    }catch(e){}
+                }
+                return 0;
+            }
+            const apiN=await cnt(['/api/pools/api','/api/api-pool']);
+            const ipN=await cnt(['/api/pools/ip','/api/ip-pool','/api/proxies']);
+            const a=document.getElementById('stat-api-pool');
+            const i=document.getElementById('stat-ip-pool');
+            if(a) a.textContent=apiN;
+            if(i) i.textContent=ipN;
+        }
+
+        
+        function showPage(name){
+            if(name==='pools'){loadPoolPanel();}
+            document.querySelectorAll('.page').forEach(el=>el.style.display='none');
+            const el=document.getElementById('page-'+name);
+            if(el) el.style.display='block';
+        }
+        async function loadPoolPanel(){
+            showPage('pools');
+            async function pull(urls){
+                for(const u of urls){
+                    try{
+                        const r=await fetchAPI(u);
+                        const d=await r.json();
+                        const items=d.items||d.data||d.list||d.ips||d.proxies||(Array.isArray(d)?d:[]);
+                        if(Array.isArray(items)) return items;
+                    }catch(e){}
+                }
+                return [];
+            }
+            const apis=await pull(['/api/pools/api','/api/api-pool']);
+            const ips=await pull(['/api/pools/ip','/api/ip-pool','/api/proxies']);
+            const ac=document.getElementById('pool-api-count');
+            const ic=document.getElementById('pool-ip-count');
+            if(ac) ac.textContent='('+apis.length+')';
+            if(ic) ic.textContent='('+ips.length+')';
+            const ab=document.getElementById('pool-api-box');
+            const ib=document.getElementById('pool-ip-box');
+            if(ab) ab.innerHTML=apis.map((x,i)=>`<div>#${i+1} ${(x.api_id||x.id||'')} ${(x.api_hash||x.hash||'')}</div>`).join('')||'暂无';
+            if(ib) ib.innerHTML=ips.map((x,i)=>`<div>#${i+1} ${(x.ip||x.host||x.proxy||x.url||JSON.stringify(x))}</div>`).join('')||'暂无';
+        }
+
+        
+        
+        function setPoolCard(id, n){
+            const el=document.getElementById(id);
+            if(el) el.textContent=n;
+        }
+
+        async function fillPoolCards(){
+            async function n(urls, filesHint){
+                for (const u of urls){
+                    try{
+                        const r = await fetchAPI(u);
+                        const d = await r.json();
+                        const items = d.items||d.data||d.list||d.proxies||d.ips||d.accounts||(Array.isArray(d)?d:[]);
+                        if (Array.isArray(items) && items.length) return items.length;
+                        if (typeof d.count==="number") return d.count;
+                    }catch(e){}
+                }
+                return 0;
+            }
+            const api = await n(['/api/pools/api','/api/api-pool','/api/stats']);
+            const ip  = await n(['/api/pools/ip','/api/ip-pool','/api/proxies']);
+            const a=document.getElementById('stat-api-pool');
+            const i=document.getElementById('stat-ip-pool');
+            if(a) a.textContent = api;
+            if(i) i.textContent = ip;
+        }
+        document.addEventListener('DOMContentLoaded', ()=>setTimeout(fillPoolCards,300));
+
+        
+        function syncPoolCardsFromDOM(){
+            const ta=document.getElementById('api-pool-text');
+            if(ta){
+                const n=ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean).length;
+                const el=document.getElementById('stat-api-pool');
+                if(el) el.textContent=n;
+            }
+            const ip=document.getElementById('ip-pool-text')||document.getElementById('proxy-pool-text');
+            if(ip){
+                const n=ip.value.split(/\n/).map(s=>s.trim()).filter(Boolean).length;
+                const el=document.getElementById('stat-ip-pool');
+                if(el) el.textContent=n;
+            }
+        }
+        setInterval(syncPoolCardsFromDOM, 2000);
+        document.addEventListener('DOMContentLoaded', ()=>setTimeout(syncPoolCardsFromDOM,500));
+
         </script>
 
         <div class="tab-content" id="tab-ip">
@@ -1633,7 +1768,7 @@
             <div class="section-title">API 池（每行 api_id,api_hash）</div>
             <textarea id="api-pool-text" placeholder="每行 api_id,api_hash" style="width:100%;min-height:220px;padding:10px;"></textarea>
             <div style="margin-top:12px;">
-                <button class="btn btn-primary" type="button" onclick="window.__dumpApiPool();return false;">保存 API 池</button>
+                <button class="btn btn-primary" type="button" onclick="setPoolCard('stat-api-pool', (items&&items.length)||0); window.__dumpApiPool();return false;">保存 API 池</button>
             </div>
         </div>
 
@@ -1666,7 +1801,7 @@
         +'</div>';
     }).join('');
   }
-  window.__dumpApiPool=function(){};
+  setPoolCard('stat-api-pool', (items&&items.length)||0); window.__dumpApiPool=function(){};
   document.addEventListener('click', function(e){
     var b=e.target.closest && e.target.closest('button');
     if(b && /保存 API/.test(b.textContent||'')) setTimeout(paint, 0);

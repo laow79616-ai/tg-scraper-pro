@@ -1924,6 +1924,8 @@ def get_stats():
         "online_accounts": online_count,
         "total_accounts": total_accounts,
         "monitor_running": monitor_running,
+        "api_pool_count": len((load_json(os.path.join(DATA_DIR,"api_pool.json"),{"items":[]}) or {}).get("items") or []),
+        "ip_pool_count": len((load_json(os.path.join(DATA_DIR,"ip_pool.json"),{"items":[]}) or {}).get("items") or []),
     }
     _stats_cache_time = now
     return jsonify(_stats_cache)
