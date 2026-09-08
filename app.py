@@ -1589,13 +1589,73 @@ def api_pools_assign():
 
 @app.route("/api/accounts", methods=["GET"])
 def get_accounts():
+    rows = load_accounts()
+    out = []
+    for a in rows:
+        b = dict(a)
+        cid = a.get("id")
+        st = (globals().get("client_status") or {}).get(cid) or {}
+        live = cid in (globals().get("clients") or {})
+        raw = (st.get("status") if isinstance(st, dict) else None) or ("online" if live else "offline")
+        if raw in ("connected","ok","online"): raw="online"
+        b["online_status"] = "online" if raw in ("online","connected","ok") else "offline"
+        b["status"] = "online" if raw in ("online","connected") or cid in clients else "offline"
+        out.append(b)
+    return jsonify(out)
+
+@app.route("/api/accounts", methods=["POST"])
+def add_account():
+    data = request.json or {}
     accounts = load_accounts()
-    # 附加在线状态 - 快速返回缓存状态，不做实际连接检查
-    for acc in accounts:
-        status = client_status.get(acc["id"], {"status": "offline"})
-        acc["online_status"] = status.get("status", "offline")
-        acc["connected_username"] = status.get("username", "")
-    return jsonify(accounts)
+    acc_id = f"acc_{int(time.time() * 1000)}"
+    api_id = str(data.get("api_id", "")).strip()
+    api_hash = str(data.get("api_hash", "")).strip()
+    phone = str(data.get("phone", "")).strip()
+    proxy = str(data.get("proxy", "")).strip()
+    if not phone:
+        return jsonify({"status": "error", "message": "手机号必填"}), 400
+    # API 空则从池分配，每条最多 5 个水军
+    if not api_id or not api_hash:
+        pool = []
+        try:
+            obj = load_json(os.path.join(DATA_DIR, "api_pool.json"), {"items": []})
+            pool = obj.get("items") if isinstance(obj, dict) else obj
+        except Exception:
+            pool = []
+        used = {}
+        for a in accounts:
+            k = str(a.get("api_id") or "")
+            used[k] = used.get(k, 0) + 1
+        picked = None
+        for it in pool or []:
+            aid = str(it.get("api_id") or it.get("id") or "")
+            ahash = str(it.get("api_hash") or it.get("hash") or "")
+            if aid and used.get(aid, 0) < 5:
+                picked = (aid, ahash)
+                break
+        if not picked:
+            return jsonify({"status": "error", "message": "API池为空或都已满5个"}), 400
+        api_id, api_hash = picked
+    if not proxy:
+        try:
+            ipobj = load_json(os.path.join(DATA_DIR, "ip_pool.json"), {"items": []})
+            ips = ipobj.get("items") if isinstance(ipobj, dict) else ipobj
+            if ips:
+                proxy = str(ips[len(accounts) % len(ips)].get("proxy") or ips[len(accounts) % len(ips)].get("url") or ips[len(accounts) % len(ips)])
+        except Exception:
+            proxy = ""
+    account = {
+        "id": acc_id,
+        "name": data.get("name", f"账号{len(accounts)+1}"),
+        "api_id": api_id,
+        "api_hash": api_hash,
+        "phone": phone,
+        "proxy": proxy,
+        "added_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    accounts.append(account)
+    save_accounts(accounts)
+    return jsonify({"status": "ok", "account": account})
 
 
 @app.route("/api/accounts", methods=["POST"])
@@ -1924,6 +1984,7 @@ def get_stats():
         "online_accounts": online_count,
         "total_accounts": total_accounts,
         "monitor_running": monitor_running,
+        "online_ids": [k for k,v in (client_status or {}).items() if (v.get("status") if isinstance(v,dict) else v) in ("online","connected")],
         "api_pool_count": len((load_json(os.path.join(DATA_DIR,"api_pool.json"),{"items":[]}) or {}).get("items") or []),
         "ip_pool_count": len((load_json(os.path.join(DATA_DIR,"ip_pool.json"),{"items":[]}) or {}).get("items") or []),
     }

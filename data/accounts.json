@@ -178,5 +178,14 @@
     "phone": "+919140991678",
     "proxy": "socks5://Pp4MIM3oNZ8P:YjrN1IlZWSgT@63.164.223.144:33713",
     "added_at": "2026-09-06 06:55:22"
+  },
+  {
+    "id": "acc_1788866649896",
+    "name": "21",
+    "api_id": "36477774",
+    "api_hash": "3202ce7116b2df1cc1c8a21fd52ebeff",
+    "phone": "+918261852441",
+    "proxy": "socks5://IJKKKsDsNAYL:QCCFEPt56mxj@63.164.223.125:38219",
+    "added_at": "2026-09-08 11:24:09"
   }
 ]

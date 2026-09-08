@@ -206,23 +206,7 @@
 
         .section-title { font-size: 16px; font-weight: bold; margin-bottom: 15px; color: #333; }
         .divider { height: 1px; background: #eee; margin: 20px 0; }
-    
-        .tab-content { display: none !important; }
-        .tab-content.active { display: block !important; }
-
     </style>
-
-<style id="ip-bind-style">
-.ip-bind-acc option:checked,
-.ip-bind-acc option:checked:hover {
-  background: #16a34a linear-gradient(#16a34a,#16a34a) !important;
-  color: #fff !important;
-}
-.ip-bind-ok {
-  display:none;margin:10px 0 0;padding:10px 12px;border-radius:8px;
-  background:#dcfce7;color:#166534;font-size:13px;font-weight:600;
-}
-</style>
 </head>
 <body>
     <div class="header">
@@ -240,9 +224,8 @@
             <div class="stat-card"><div class="number green" id="stat-usernames">0</div><div class="label">有效用户名</div></div>
             <div class="stat-card"><div class="number orange" id="stat-groups">0</div><div class="label">已发现群组</div></div>
             <div class="stat-card"><div class="number purple" id="stat-accounts">0</div><div class="label">在线账号</div></div>
-            <div class="stat-card"><div class="number red" id="stat-tasks">0</div><div class="label">采集任务</div></div><div class="stat-card"><div class="number red" id="stat-api-pool">0</div><div class="label">API池</div></div><div class="stat-card"><div class="number red" id="stat-ip-pool">0</div><div class="label">IP池</div></div>
+            <div class="stat-card"><div class="number red" id="stat-tasks">0</div><div class="label">采集任务</div></div>
         </div>
-
 
         <!-- 标签页 -->
         <div class="tabs">
@@ -251,74 +234,42 @@
             <div class="tab" onclick="switchTab('scrape')">采集任务</div>
             <div class="tab" onclick="switchTab('monitor');refreshMonitorTargets()">24H监听</div>
             <div class="tab" onclick="switchTab('data')">数据管理</div>
-                <div class="tab" onclick="switchTab('ip');loadIpBindPage()">IP池</div>
-            <div class="tab" onclick="switchTab('api');loadApiPool();loadApiPoolAccounts();loadApiPoolPage()">API池</div>
+                <div class="tab" onclick="togglePool('ip')">IP池</div>
+                <div class="tab" onclick="togglePool('api')">API池</div>
 </div>
 
         <!-- 账号管理 -->
         <div class="tab-content active" id="tab-accounts">
-            <div id="acc-toolbar" style="display:flex;justify-content:space-between;align-items:center;margin:0 0 12px;">
-                
-                <div>
-                    <button class="btn btn-primary" onclick="connectAllAccounts();return false;">一键全部连接</button>
-                    <button class="btn" style="background:#6d28d9;color:#fff;" onclick="showAddAccount();return false;">+ 添加账号</button>
-                </div>
-            </div>
-<div id="accounts-list"></div>
-
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
 
-        
-<div class="section-title">水军账号管理</div>
-            <div id="accounts-list"></div>
-
+        <div id="pool-panel" style="display:none;margin:8px 0 12px;padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#fafafa;">
+            <div id="pool-ip-wrap" style="display:none;">
+                <div style="font-weight:600;margin-bottom:6px;">IP池（每行一个代理）</div>
+                <textarea id="ip-pool-text" rows="5" placeholder="socks5://user:pass@host:port"></textarea>
+                <div id="ip-pool-list" style="margin-top:8px;"></div>
+            </div>
+            <div id="pool-api-wrap" style="display:none;">
+                <div style="font-weight:600;margin-bottom:6px;">API池（每行 api_id,api_hash）</div>
+                <textarea id="api-pool-text" rows="5" placeholder="123456,0123456789abcdef"></textarea>
+                <div id="api-pool-list" style="margin-top:8px;"></div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                <button class="btn" onclick="savePools()">保存</button>
+                <button class="btn btn-primary" id="btn-assign-one" onclick="assignPools(currentPool||'api')">一键分配当前池</button>
+                <button class="btn btn-success" onclick="assignPools('both')">IP+API全部分配</button>
+            </div>
+        </div>
+<div class="section-title">水军账号管理（最多5个）</div>
                 <div>
-                    <button class="btn btn-info btn-sm" onclick="connectAllAccounts();return false;">一键全部连接</button>
-                    <button class="btn btn-primary btn-sm" onclick="showAddAccount();return false;">+ 添加账号</button>
+                    <button class="btn btn-info btn-sm" onclick="connectAllAccounts()">一键全部连接</button>
+                    <button class="btn btn-primary btn-sm" onclick="showAddAccount()">+ 添加账号</button>
                 </div>
             </div>
-            
-        
-            
-            <div style="margin-top:12px;">
-                
-            </div>
+            <div id="accounts-list"></div>
         </div>
 
-        </div>
-
-        <div class="tab-content" id="tab-api">
-            <div class="section-title">API 池</div>
-            <div style="font-size:13px;color:#6b7280;margin:0 0 8px;">规则：添加水军时自动从本池分配 API；1 条 API 最多匹配 5 个水军。每行一条：api_id,api_hash</div>
-            <textarea id="api-pool-text" style="width:100%;min-height:200px;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-family:monospace;">36477774,3202ce7116b2df1cc1c8a21fd52ebeff
-38611167,8a7b2511678a9274fb2641caf16921cc
-32546558,920b985d91af200a2f1128da6ca464ab
-39819177,a8db0f1dcfe180bd6255a3238609d317
-37469924,77a8e05974d87f51add165e35115d673
-37127925,0d12abd5e021226cfde0a6a4bd18f2eb
-35429503,ed7723903eedb2a8b4d247e9d85b0c06
-37721187,ae1aa1f07bca20085e5ccebb3df23330
-33835697,c1b2165b8292e093a5cf46006e72ce6e
-30548968,bbe4acf228f7d9d363acb897c4737dd9
-32497931,d994f1c8fe0214a78a34c088837f286e
-30853115,2eb63c744c613d8806232ce34053aacc
-36806619,8a488411a892e7374bc51e92563f3873
-38493322,212fe93cb67edf9b3853b9aacfdf0e0f
-37835426,9985258fb3a6f44a9f46fcc648d50ce6
-35255293,020da6b9a8e4b1745cc54ef7480690db
-34790522,bd53df92093cb8a0767d500570f06c66
-33209857,f7aa1cdf77060f9c4ce74111419fad09
-35546389,63fac22ae1a386c11ef8395ad3a2fbe9
-32411051,727de78b972abbf1edc0488f922dda0d</textarea>
-            <div style="margin:10px 0 18px;">
-                <button class="btn btn-primary" onclick="setPoolCard('stat-api-pool', (items&&items.length)||0); window.__dumpApiPool();return false;">保存 API 池</button>
-            <div id="api-pool-result" style="display:none" style="margin-top:14px;"></div>
-            </div>
-            <div class="section-title">使用这些 API 的水军</div>
-            <div id="api-pool-accounts" style="font-size:13px;color:#374151;"></div>
-
-        </div>
-<div class="tab-content" id="tab-search">
+        <!-- 搜索群组 -->
+        <div class="tab-content" id="tab-search">
             <div class="section-title">关键词搜索群组</div>
             <div class="form-row">
                 <div class="form-group" style="flex:3;">
@@ -367,21 +318,7 @@
             </div>
         </div>
 
-        
-        <div id="page-pools" class="page" style="display:none;">
-            <div class="section-title">资源池</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-                <div class="card">
-                    <div class="section-title">API 池 <span id="pool-api-count"></span></div>
-                    <div id="pool-api-box" style="font-size:13px;"></div>
-                </div>
-                <div class="card">
-                    <div class="section-title">IP 池 <span id="pool-ip-count"></span></div>
-                    <div id="pool-ip-box" style="font-size:13px;"></div>
-                </div>
-            </div>
-        </div>
-<!-- 24H监听 -->
+        <!-- 24H监听 -->
         <div class="tab-content" id="tab-monitor">
             <div class="section-title">24小时实时监听</div>
             <div class="help-text" style="color:#666;font-size:13px;margin:8px 0 16px;">
@@ -450,9 +387,14 @@
             <div class="form-group" style="margin-bottom:20px;">
                 <label>手机号（带区号）</label>
                 <input type="text" id="new-acc-phone" placeholder="+60196075456">
-                </div>
+                <label>指定IP（必选）</label>
+                <select id="new-acc-proxy" required>
+                    <option value="">请选择IP池中的代理</option>
+                </select>
+
+            </div>
             <div style="display:flex; gap:10px;">
-                <button class="btn btn-primary" onclick="addAccount();return false;">添加</button>
+                <button class="btn btn-primary" onclick="addAccount()">添加</button>
                 <button class="btn" style="background:#eee;" onclick="closeModal('modal-add-account')">取消</button>
             </div>
         </div>
@@ -466,88 +408,38 @@
             <div class="form-group" style="margin-bottom:12px;">
                 <input type="text" id="verify-code" placeholder="输入验证码">
             </div>
-            
+            <div class="form-group" style="margin-bottom:20px;">
+                <input type="password" id="verify-password" placeholder="两步验证密码（如有）">
+            </div>
+            <button class="btn btn-primary" onclick="submitCode()">确认</button>
         </div>
-            
+    </div>
+
+            <p style="color:#888;font-size:13px;">每行 api_id,api_hash</p>
+            <textarea id="api-pool-text" rows="12" style="width:100%;"></textarea>
+            <button class="btn btn-primary" onclick="saveApiPool()">保存 API 池</button>
+        </div>
+
+        
+        <div class="tab-content" id="tab-ip">
+            <div class="section-title">IP 池</div>
+            <p style="color:#666;font-size:13px;">每行一条代理，保存后可在账号里绑定。</p>
+            <textarea id="ip-pool-text" rows="12" style="width:100%;font-family:monospace;" placeholder="socks5://user:pass@host:port"></textarea>
+            <div id="ip-pool-rows"></div>
             <div style="margin-top:10px;">
-                
+                <button class="btn btn-primary" onclick="saveIpPoolPage()">保存 IP 池</button>
+            </div>
+        </div>
+        <div class="tab-content" id="tab-api">
+            <div class="section-title">API 池</div>
+            <textarea id="api-pool-text" rows="12" style="width:100%;font-family:monospace;" placeholder="api_id api_hash  或 api_id:api_hash"></textarea>
+            <div style="margin-top:10px;">
+                <button class="btn btn-primary" onclick="saveApiPoolPage()">保存 API 池</button>
             </div>
         </div>
 
         <script>
 
-        let _ipBind = [];
-        let _accOpts = [];
-        function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-        function renderIpBind(){
-            const box=document.getElementById('ip-bind-rows');
-            if(!box) return;
-            const opts=['<option value="">未指定水军</option>'].concat(_accOpts.map(a=>`<option value="${_esc(a.id)}">${_esc(a.name||a.phone||a.id)}</option>`));
-            const rows=_ipBind.length?_ipBind:[{proxy:'',acc_id:''}];
-            box.innerHTML=rows.map((it,i)=>`
-                <div class="ip-bind-row" data-i="${i}" style="display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap;">
-                    <input class="ip-bind-proxy" style="flex:1;min-width:280px;padding:8px;" value="${_esc(it.proxy)}" placeholder="socks5://user:pass@host:port">
-                    <select class="ip-bind-acc" multiple size="4" style="min-width:220px;padding:6px;">${opts.join('')}</select>
-                    <button class="btn btn-sm btn-danger" onclick="delIpBindRow(${i})">删除</button>
-                </div>`).join('');
-            box.querySelectorAll('.ip-bind-row').forEach(row=>{
-                const i=+row.dataset.i;
-                const sel=row.querySelector('.ip-bind-acc');
-                const ids=(_ipBind[i]&&(_ipBind[i].acc_ids||(_ipBind[i].acc_id?[ _ipBind[i].acc_id]:[])))||[];
-                if(sel) [...sel.options].forEach(o=> o.selected = ids.includes(o.value));
-            });
-        }
-        function collectIpBind(){
-            const box=document.getElementById('ip-bind-rows');
-            if(!box) return _ipBind;
-            return [...box.querySelectorAll('.ip-bind-row')].map(row=>{
-                const sel=row.querySelector('.ip-bind-acc');
-                const acc_ids=sel?[...sel.selectedOptions].map(o=>o.value).filter(Boolean):[];
-                return {proxy:(row.querySelector('.ip-bind-proxy').value||'').trim(), acc_ids, acc_id:acc_ids[0]||''};
-            }).filter(x=>x.proxy);
-        }
-        
-        function delIpBindRow(i){ _ipBind=collectIpBind(); _ipBind.splice(i,1); renderIpBind(); }
-        function _hideStrayApiOnIp(){
-            document.querySelectorAll("textarea").forEach(el=>{
-                const ph=(el.placeholder||"")+(el.id||"");
-                if(el.id!=="api-pool-text" && /api/i.test(ph)){
-                    el.style.display="none";
-                    const btn=el.parentElement && el.parentElement.querySelector("button");
-                    if(btn && /API/.test(btn.textContent||"")) btn.style.display="none";
-                }
-            });
-            const apiPane=document.getElementById("tab-api");
-            if(apiPane && !apiPane.classList.contains("active")) apiPane.style.display="none";
-        }
-
-        function loadIpBindPage(){
-            try{
-                const [r1,r2]=Promise.all([fetchAPI('/api/pools/ip'), fetchAPI('/api/accounts')]);
-                const d1=r1.json();
-                const d2=r2.json();
-                _ipBind=(d1.items||[]).map(x=> typeof x==='string'?{proxy:x,acc_ids:[],acc_id:''}:{proxy:x.proxy||'',acc_ids:x.acc_ids||(x.acc_id?[x.acc_id]:[]),acc_id:x.acc_id||''});
-                _accOpts=Array.isArray(d2)?d2:(d2.accounts||[]);
-                renderIpBind();
-            }catch(e){ console.error(e); alert('加载IP池失败: '+e.message); }
-        }
-        async function saveIpBind(){
-            const items=collectIpBind();
-            const res=fetchAPI('/api/pools/ip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
-            const data=res.json();
-            alert('已保存，绑定 '+ (data.bound||0) +' 个水军');
-            if(typeof loadAccounts==='function') loadAccounts();
-        }
-        async function loadApiPoolPage(){
-            try{
-                const res=fetchAPI('/api/pools/api');
-                const data=await res.json();
-                const items=data.items||[];
-                const ta=document.getElementById('api-pool-text');
-                if(ta) ta.value=items.map(x=> typeof x==='string'?x:((x.api_id||'')+' '+(x.api_hash||'')).trim()).filter(Boolean).join('\n');
-            }catch(e){ console.error(e); }
-        }
-        
         async function loadIpPoolPage(){
             try{
                 const res=await fetchAPI('/api/pools/ip');
@@ -576,55 +468,37 @@
                 }).filter(Boolean).join('\n');
             }catch(e){ console.error(e); }
         }
-        
-        function _cleanAccountsPane(){
-            const acc=document.getElementById('tab-accounts');
-            if(!acc) return;
-            acc.querySelectorAll('button').forEach(b=>{
-                const x=(b.textContent||'').trim();
-                if(x==='+ 添加 IP' || x==='保存匹配' || x==='保存 API 池') b.remove();
-            });
-            acc.querySelectorAll('textarea').forEach(el=>{
-                if(/api/i.test(el.placeholder||el.id||'')) el.remove();
-            });
+        async function saveApiPoolPage(){
+            const ta=document.getElementById('api-pool-text');
+            const items=(ta.value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+            const res=await fetchAPI('/api/pools/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
+            const data=await res.json();
+            alert('API池已保存: '+(data.count||items.length));
         }
 
-        
-        function asList(data){
-            if (!data) return [];
-            if (Array.isArray(data)) return data;
-            if (Array.isArray(data.items)) return data.items;
-            if (Array.isArray(data.list)) return data.list;
-            if (Array.isArray(data.ips)) return data.ips;
-            if (Array.isArray(data.pool)) return data.pool;
-            if (Array.isArray(data.ip_pool)) return data.ip_pool;
-            if (Array.isArray(data.api_pool)) return data.api_pool;
-            if (data.pool && Array.isArray(data.pool.items)) return data.pool.items;
-            if (Array.isArray(data.accounts)) return data.accounts;
-            if (Array.isArray(data.groups)) return data.groups;
-            if (Array.isArray(data.data)) return data.data;
-            return [];
-        }
+        let currentCodeAccountId = null;
+        let usersPage = 1;
 
+        // 切换标签页
         function switchTab(name) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            const pane = document.getElementById('tab-' + name);
-            if (pane) pane.classList.add('active');
-            document.querySelectorAll('.tab').forEach(t => {
-                const oc = t.getAttribute('onclick') || '';
-                if (oc.includes("'" + name + "'") || oc.includes('"' + name + '"')) t.classList.add('active');
+            document.querySelectorAll('.tab').forEach((t, i) => {
+                t.classList.remove('active');
             });
-            if (name === 'accounts') { _cleanAccountsPane(); loadAccounts(); }
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            const pane = document.getElementById('tab-' + name); if (pane) pane.classList.add('active');
+            event.target.classList.add('active');
+
+            if (name === 'accounts') loadAccounts();
             if (name === 'search') loadGroups();
-            if (name === 'ip') { if (typeof loadIpBindPage==='function') loadIpBindPage(); else if (typeof loadIpPoolPage==='function') loadIpPoolPage(); }
-            if (name === 'api') { if (typeof loadApiPoolPage==='function') loadApiPoolPage(); }
+            if (name === 'ip') loadIpPoolPage();
+            if (name === 'api') loadApiPoolPage();
             if (name === 'data') { usersPage = 1; loadUsers(); }
             if (name === 'monitor') loadMonitorStatus();
         }
+
         // 带超时的 fetch
         async function saveIpPool(){ const v=document.getElementById('ip-pool-text').value; await fetchAPI('/api/pools/ip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:v})}); alert('已保存IP池'); }
-        
+        async function saveApiPool(){ const v=document.getElementById('api-pool-text').value; await fetchAPI('/api/pools/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:v})}); alert('已保存API池'); }
         function fetchAPI(url, options = {}, timeout = 120000) {
             return Promise.race([
                 fetch(url, options),
@@ -662,11 +536,9 @@
         async function loadAccounts() {
             try {
                 const res = await fetchAPI('/api/accounts');
-                const raw = await res.json();
-                const accounts = Array.isArray(raw) ? raw : (raw.items || raw.accounts || raw.data || []);
-                const list = document.getElementById('accounts-list') || document.getElementById('account-list');
-                if (!list) return;
-                if (!accounts.length) {
+                const accounts = await res.json();
+                const list = document.getElementById('accounts-list');
+                if (accounts.length === 0) {
                     list.innerHTML = '<p style="color:#888; text-align:center; padding:30px;">暂无账号，请点击"添加账号"</p>';
                     return;
                 }
@@ -677,7 +549,7 @@
                                 <span class="status-dot ${acc.online_status === 'online' ? 'online' : 'offline'}"></span>
                                 ${acc.name} ${acc.connected_username ? '(@' + acc.connected_username + ')' : ''}
                             </div>
-                            <div class="detail">手机: ${acc.phone} | API ID: ${acc.api_id} | 状态: ${acc.online_status === 'online' ? '在线' : '离线'}</div>
+                            <div class="detail">手机: ${acc.phone} | API ID: ${acc.api_id} | 状态: ${(acc.status==='online'||acc.online_status==='online'||acc.status==='connected') ? '<span style=color:#16a34a;font-weight:700>在线</span>' : '离线'}</div>
                         </div>
                         <div class="account-actions">
                             ${acc.online_status === 'online' 
@@ -702,33 +574,26 @@
             document.getElementById(id).classList.remove('active');
         }
 
-                async function addAccount(){
-            const name=(document.getElementById('new-acc-name')||{}).value||'';
-            const api_id=(document.getElementById('new-acc-api-id')||{}).value||'';
-            const api_hash=(document.getElementById('new-acc-api-hash')||{}).value||'';
-            const phone=(document.getElementById('new-acc-phone')||{}).value||'';
-            if(!phone.trim()){
-                alert('请填写手机号（API 可留空，系统按每条最多5个自动分配）');
+        async function addAccount() {
+            const data = {
+                name: document.getElementById('new-acc-name').value || '水军账号',
+                api_id: document.getElementById('new-acc-api-id').value,
+                api_hash: document.getElementById('new-acc-api-hash').value,
+                phone: document.getElementById('new-acc-phone').value,
+                proxy: (document.getElementById('new-acc-proxy')||{}).value || '',
+            };
+            if (!data.phone || !data.proxy) {
+                alert('请填写手机号并选择指定IP');
                 return;
             }
-            try{
-                const res=await fetchAPI('/api/accounts',{
-                    method:'POST',
-                    headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({name:name.trim(), api_id:api_id.trim(), api_hash:api_hash.trim(), phone:phone.trim(), proxy:''})
-                });
-                const data=await res.json();
-                if(data.status==='error'){
-                    alert(data.message||'添加失败');
-                    return;
-                }
-                const modal=document.getElementById('add-account-modal')||document.getElementById('modal-add-account');
-                if(modal) modal.style.display='none';
-                if(typeof loadAccounts==='function') loadAccounts();
-                if(typeof loadStats==='function') loadStats();loadPoolStats();
-            }catch(e){
-                alert('添加失败: '+e.message);
-            }
+            await fetchAPI('/api/accounts', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            closeModal('modal-add-account');
+            loadAccounts();
+            loadStats();
         }
 
         async function connectAccount(accId) {
@@ -1258,7 +1123,7 @@
                 const ip = await (await fetch('/api/pools/ip', {credentials:'same-origin'})).json();
                 const items = ip.items || [];
                 const cur = sel.value;
-                sel.innerHTML = '<option value=""></option>';
+                sel.innerHTML = '<option value="">请选择IP池中的代理</option>';
                 items.forEach((x,i) => {
                     const opt = document.createElement('option');
                     opt.value = x;
@@ -1269,7 +1134,7 @@
                 if (!items.length) {
                     const opt = document.createElement('option');
                     opt.value = '';
-                    opt.textContent = '';
+                    opt.textContent = 'IP池为空，先到IP池保存';
                     sel.appendChild(opt);
                 }
             } catch (e) { console.log(e); }
@@ -1313,526 +1178,6 @@
             loadPools();
         }
 
-
-        function asList(data){
-            if (!data) return [];
-            if (Array.isArray(data)) return data;
-            if (Array.isArray(data.items)) return data.items;
-            if (Array.isArray(data.list)) return data.list;
-            if (Array.isArray(data.data)) return data.data;
-            return [];
-        }
-        
-        async function loadIpBindPage(){
-            const box=document.getElementById('ip-bind-list');
-            if(!box) return;
-            let accs=[], items=[];
-            try{
-                const ra=await fetchAPI('/api/accounts');
-                const da=await ra.json();
-                accs = Array.isArray(da)?da:(da.accounts||da.data||[]);
-            }catch(e){}
-            try{
-                const rp=await fetchAPI('/api/pools/ip');
-                const dp=await rp.json();
-                if(Array.isArray(dp)) items=dp;
-                else items = dp.items || dp.data || dp.list || dp.binds || [];
-                if(typeof items==='object' && !Array.isArray(items)){
-                    items=Object.entries(items).map(([ip,v])=>({
-                        ip,
-                        account_ids: Array.isArray(v)?v:(v.account_ids||v.accounts||[])
-                    }));
-                }
-            }catch(e){ console.log('ip pool load', e); }
-            window._ipAccs=accs;
-            window._ipItems=items;
-            if(typeof renderIpRows==='function') renderIpRows(items);
-            if(typeof refreshIpAccountOptions==='function') refreshIpAccountOptions();
-        }
-
-        async function delIpBindRow(i){
-            const items=window._ipItems||[];
-            const row=items[i];
-            if (row && (row.ip||row.proxy)){
-                try{
-                    await fetchAPI('/api/pools/ip/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip:row.ip||row.proxy})});
-                }catch(e){}
-            }
-            items.splice(i,1);
-            window._ipItems=items;
-            loadIpBindPage();
-        }
-        async function saveIpBinds(){
-            const rows=[...document.querySelectorAll('.ip-bind-row')];
-            const items=rows.map(r=>{
-                const ip=r.querySelector('.ip-bind-ip').value.trim();
-                const acc=[...r.querySelector('.ip-bind-acc').selectedOptions].map(o=>o.value);
-                return {ip, account_ids:acc};
-            }).filter(x=>x.ip);
-            const res=await fetchAPI('/api/pools/ip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
-            const data=await res.json();
-            alert(data.message||data.status||'已保存');
-            loadIpBindPage();
-        }
-        async function loadApiPoolPage(){
-            try{
-                const res=await fetchAPI('/api/pools/api');
-                const data=await res.json();
-                const items=asList(data);
-                const ta=document.getElementById('api-pool-text');
-                if (!ta) return;
-                ta.value=items.map(x=>{
-                    if (typeof x==='string') return x;
-                    return [x.api_id||x.id||'', x.api_hash||x.hash||''].filter(Boolean).join(',');
-                }).join('\n');
-            }catch(e){
-                console.error(e);
-            }
-        }
-        
-        function poolItems(data){
-            if (!data) return [];
-            if (Array.isArray(data)) return data;
-            for (const k of ['items','list','pool','ips','data','ip_pool','api_pool']) {
-                if (Array.isArray(data[k])) return data[k];
-            }
-            if (data.pool && Array.isArray(data.pool.items)) return data.pool.items;
-            return [];
-        }
-        async function loadIpBindPage(){
-            try{
-                const res = await fetchAPI('/api/pools/ip');
-                const data = await res.json();
-                console.log('ip pool raw', data);
-                let items = poolItems(data);
-                const accRes = await fetchAPI('/api/accounts');
-                const accRaw = await accRes.json();
-                const accs = Array.isArray(accRaw) ? accRaw : poolItems(accRaw);
-                const box = document.getElementById('ip-bind-list');
-                if (!box) return;
-                window._ipItems = items;
-                window._ipAccs = accs;
-                renderIpRows(items);
-                return;
-                if (!items.length){
-                    box.innerHTML = '<div style="color:#888;padding:8px;">暂无 IP，点击下方添加</div>';
-                    return;
-                }
-                box.innerHTML = items.map((row,i)=>{
-                    const ip = (typeof row==='string') ? row : (row.ip || row.proxy || row.host || row.socks || row.addr || '');
-                    const selected = new Set(((row && (row.account_ids || row.accounts)) || []).map(String));
-                    const opts = accs.map(a=>{
-                        const id=String(a.id||'');
-                        const label=[a.name, a.connected_username?('@'+a.connected_username):'', a.phone||''].filter(Boolean).join(' ');
-                        return `<option value="${id}" ${selected.has(id)?'selected':''}>${label||id}</option>`;
-                    }).join('');
-                    return `<div class="ip-bind-row" data-i="${i}" style="display:flex;gap:8px;align-items:flex-start;margin:8px 0;">
-                        <input class="ip-bind-ip" value="${ip}" placeholder="socks5://host:port" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:6px;">
-                        <select class="ip-bind-acc" multiple size="6" style="min-width:260px;padding:6px;">${opts}</select>
-                        <button class="btn btn-sm btn-danger" type="button" onclick="delIpBindRow(${i})">删除</button>
-                    </div>`;
-                }).join('');
-            }catch(e){
-                console.error(e);
-                alert('加载IP池失败: '+e.message);
-            }
-        }
-        async function loadApiPoolPage(){
-            try{
-                const res=await fetchAPI('/api/pools/api');
-                const data=await res.json();
-                console.log('api pool raw', data);
-                const items=poolItems(data);
-                const ta=document.getElementById('api-pool-text');
-                if (!ta) return;
-                ta.value=items.map(x=>{
-                    if (typeof x==='string') return x;
-                    return [x.api_id||x.id||'', x.api_hash||x.hash||''].filter(Boolean).join(',');
-                }).join('\n');
-            }catch(e){ console.error(e); }
-        }
-
-        
-        document.addEventListener('DOMContentLoaded', function(){
-            setTimeout(function(){
-                if (typeof loadIpBindPage==='function') loadIpBindPage();
-                if (typeof loadApiPoolPage==='function') loadApiPoolPage();
-                var ta=document.getElementById('api-pool-text')
-                    || document.querySelector('#tab-api textarea')
-                    || document.querySelector('textarea[placeholder*="api_id"]');
-                if (ta && !ta.value) {
-                    fetchAPI('/api/pools/api').then(r=>r.json()).then(d=>{
-                        console.log('api boot', d);
-                        const items = Array.isArray(d)?d:(d.items||d.list||d.pool||d.data||[]);
-                        ta.value = items.map(x=> typeof x==='string'?x:[x.api_id||x.id||'',x.api_hash||x.hash||''].filter(Boolean).join(' ')).join('\n');
-                    }).catch(e=>console.error(e));
-                }
-            }, 300);
-        });
-
-        
-        
-        function delIpBindRow(i){
-            const rows=[...document.querySelectorAll('#ip-bind-list .ip-bind-row')];
-            if(rows[i]) rows[i].remove();
-        }
-        async function saveIpBinds(){
-            const rows=[...document.querySelectorAll('#ip-bind-list .ip-bind-row')];
-            const items=rows.map(row=>({
-                ip: (row.querySelector('.ip-bind-ip')||{}).value||'',
-                account_ids: [...(row.querySelector('.ip-bind-acc')||{selectedOptions:[]}).selectedOptions].map(o=>o.value)
-            })).filter(x=>x.ip.trim());
-            const res=await fetchAPI('/api/pools/ip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
-            const data=await res.json();
-            const ok = data.status==='ok'||data.status==='success';
-            let tip=document.getElementById('ip-bind-ok');
-            if(!tip){
-                tip=document.createElement('div');
-                tip.id='ip-bind-ok';
-                tip.className='ip-bind-ok';
-                const box=document.getElementById('ip-bind-list');
-                if(box&&box.parentNode) box.parentNode.insertBefore(tip, box.nextSibling);
-            }
-            tip.style.display='block';
-            tip.style.background= ok ? '#dcfce7' : '#fee2e2';
-            tip.style.color= ok ? '#166534' : '#991b1b';
-            tip.textContent = ok ? ('保存匹配成功，已绑定 '+items.length+' 条 IP') : ('保存失败 '+(data.message||''));
-            if(ok){ renderIpRows(items); refreshIpAccountOptions(); }
-        }
-        
-        function accLabel(a){
-            return [a.name, a.connected_username?('@'+a.connected_username):'', a.phone||''].filter(Boolean).join(' ') || a.id;
-        }
-        function takenAccountIds(exceptRow){
-            const used=new Set();
-            document.querySelectorAll('#ip-bind-list .ip-bind-row').forEach(row=>{
-                if(exceptRow && row===exceptRow) return;
-                const sel=row.querySelector('.ip-bind-acc');
-                if(!sel) return;
-                [...sel.selectedOptions].forEach(o=>used.add(String(o.value)));
-            });
-            return used;
-        }
-        function buildAccOptions(selectedIds, exceptRow){
-            const accs=window._ipAccs||[];
-            const mine=new Set((selectedIds||[]).map(String));
-            const used=takenAccountIds(exceptRow);
-            return accs.filter(a=>{
-                const id=String(a.id||'');
-                return mine.has(id) || !used.has(id);
-            }).map(a=>{
-                const id=String(a.id||'');
-                const on=mine.has(id);
-                return `<option value="${id}" ${on?'selected':''} style="${on?'background:#16a34a;color:#fff':''}">${accLabel(a)}</option>`;
-            }).join('');
-        }
-        function renderIpRows(items){
-            const box=document.getElementById('ip-bind-list');
-            if(!box) return;
-            items=(items||[]).filter(r=>{
-                const ip=(typeof r==='string')?r:(r.ip||r.proxy||'');
-                return String(ip||'').trim();
-            });
-            if(!items.length){
-                box.innerHTML='<div class="ip-empty" style="color:#888;padding:8px;">暂无 IP，点击下方添加</div>';
-                return;
-            }
-            box.innerHTML=items.map(row=>{
-                const ip=(typeof row==='string')?row:(row.ip||row.proxy||'');
-                const ids=(row.account_ids||row.accounts||[]).concat(row.acc_id?[row.acc_id]:[]).filter(Boolean).map(String);
-                return `<div class="ip-bind-row" style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin:10px 0;background:#fff;">
-                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-                        <input class="ip-bind-ip" value="${String(ip).replace(/"/g,'&quot;')}" style="flex:1;min-width:240px;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
-                        <button class="btn btn-sm btn-danger" type="button" onclick="this.closest('.ip-bind-row').remove();refreshIpAccountOptions();">删除</button>
-                    </div>
-                    <div style="font-size:12px;color:#6b7280;margin:0 0 6px;">选择使用该 IP 的水军（已绑定的不会出现在其他 IP）</div>
-                    <select class="ip-bind-acc" multiple size="8" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:8px;"></select>
-                </div>`;
-            }).join('');
-            document.querySelectorAll('#ip-bind-list .ip-bind-row').forEach((row,i)=>{
-                const ids=(items[i].account_ids||items[i].accounts||[]).concat(items[i].acc_id?[items[i].acc_id]:[]).filter(Boolean).map(String);
-                const sel=row.querySelector('.ip-bind-acc');
-                sel.innerHTML=buildAccOptions(ids, row);
-            });
-        }
-        function refreshIpAccountOptions(){
-            document.querySelectorAll('#ip-bind-list .ip-bind-row').forEach(row=>{
-                const sel=row.querySelector('.ip-bind-acc');
-                if(!sel) return;
-                const mine=[...sel.selectedOptions].map(o=>o.value);
-                sel.innerHTML=buildAccOptions(mine, row);
-            });
-        }
-        function addIpBindRow(){
-            const box=document.getElementById('ip-bind-list');
-            if(!box) return;
-            const empty=box.querySelector('.ip-empty');
-            if(empty) empty.remove();
-            const wrap=document.createElement('div');
-            wrap.className='ip-bind-row';
-            wrap.style.cssText='border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin:10px 0;background:#fff;';
-            wrap.innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-                <input class="ip-bind-ip" placeholder="填写新 IP / 代理，例如 ip:port:user:pass" style="flex:1;min-width:240px;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
-                <button class="btn btn-sm btn-danger" type="button">删除</button>
-            </div>
-            <div style="font-size:12px;color:#6b7280;margin:0 0 6px;">选择使用该 IP 的水军（已绑定的不会出现）</div>
-            <select class="ip-bind-acc" multiple size="8" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:8px;"></select>`;
-            wrap.querySelector('button').onclick=function(){ wrap.remove(); refreshIpAccountOptions(); };
-            box.appendChild(wrap);
-            wrap.querySelector('.ip-bind-acc').innerHTML=buildAccOptions([], wrap);
-            wrap.querySelector('.ip-bind-ip').focus();
-        }
-        document.addEventListener('change', function(e){
-            if(e.target && e.target.classList && e.target.classList.contains('ip-bind-acc')){
-                refreshIpAccountOptions();
-            }
-        });
-
-        
-        
-        
-        
-        
-        
-        function parseApiPoolText(){
-            const ta=document.getElementById('api-pool-text');
-            return (ta&&ta.value||'').split(/\n/).map(s=>s.trim()).filter(Boolean).map(line=>{
-                const p=line.split(/[\s,;]+/).filter(Boolean);
-                return p.length>=2 ? {api_id:p[0], api_hash:p[1]} : null;
-            }).filter(Boolean);
-        }
-        function renderApiPoolUsage(){
-            let box=document.getElementById('api-pool-accounts');
-            if(!box){
-                const title=[...document.querySelectorAll('div,h3')].find(n=> (n.textContent||'').includes('使用这些 API'));
-                box=document.createElement('div');
-                box.id='api-pool-accounts';
-                if(title) title.after(box);
-                else {
-                    const ta=document.getElementById('api-pool-text');
-                    if(ta) ta.parentElement.appendChild(box);
-                }
-            }
-            const items=parseApiPoolText();
-            const accs=window._apiAccs||[];
-            if(!items.length){
-                box.innerHTML='<div style="color:#888;padding:8px 0;">还没有 API 记录</div>';
-                return;
-            }
-            box.innerHTML=items.map((it,idx)=>{
-                const used=accs.filter(a=>String(a.api_id||'')===String(it.api_id));
-                const names=used.length ? used.map(a=>{
-                    const n=a.connected_username?('@'+a.connected_username):(a.name||a.phone||a.id);
-                    return `<div>#${idx+1} ${n} ${a.phone||''}</div>`;
-                }).join('') : '<div style="color:#9ca3af;">暂无水军使用（0/5）</div>';
-                return `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin:8px 0;background:#fff;">
-                    <div style="font-weight:600;word-break:break-all;">#${idx+1}　${it.api_id} <span style="color:#2563eb;font-weight:500;">${used.length}/5</span></div>
-                    <div style="font-size:12px;color:#6b7280;word-break:break-all;margin:4px 0 8px;">${it.api_hash}</div>
-                    ${names}
-                </div>`;
-            }).join('');
-        }
-        async function loadApiPoolAccounts(){
-            try{
-                const res=await fetchAPI('/api/accounts');
-                const data=await res.json();
-                window._apiAccs=Array.isArray(data)?data:(data.accounts||data.data||[]);
-            }catch(e){ window._apiAccs=window._apiAccs||[]; }
-            renderApiPoolUsage();
-        }
-        async function saveApiPool(){
-            const items=parseApiPoolText();
-            renderApiPoolUsage();
-            try{
-                await fetchAPI('/api/pools/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
-            }catch(e){}
-            await loadApiPoolAccounts();
-        }
-        document.addEventListener('click', function(e){
-            const tab=e.target.closest && e.target.closest('.tab');
-            if(tab && /API/.test(tab.textContent||'')) setTimeout(loadApiPoolAccounts, 50);
-        });
-
-        
-        async function loadPoolStats(){
-            async function cnt(urls){
-                for(const u of urls){
-                    try{
-                        const r=await fetchAPI(u);
-                        const d=await r.json();
-                        const items=d.items||d.data||d.list||d.ips||d.proxies||(Array.isArray(d)?d:[]);
-                        if(Array.isArray(items)) return items.length;
-                        if(typeof d.count==='number') return d.count;
-                    }catch(e){}
-                }
-                return 0;
-            }
-            const apiN=await cnt(['/api/pools/api','/api/api-pool']);
-            const ipN=await cnt(['/api/pools/ip','/api/ip-pool','/api/proxies']);
-            const a=document.getElementById('stat-api-pool');
-            const i=document.getElementById('stat-ip-pool');
-            if(a) a.textContent=apiN;
-            if(i) i.textContent=ipN;
-        }
-
-        
-        function showPage(name){
-            if(name==='pools'){loadPoolPanel();}
-            document.querySelectorAll('.page').forEach(el=>el.style.display='none');
-            const el=document.getElementById('page-'+name);
-            if(el) el.style.display='block';
-        }
-        async function loadPoolPanel(){
-            showPage('pools');
-            async function pull(urls){
-                for(const u of urls){
-                    try{
-                        const r=await fetchAPI(u);
-                        const d=await r.json();
-                        const items=d.items||d.data||d.list||d.ips||d.proxies||(Array.isArray(d)?d:[]);
-                        if(Array.isArray(items)) return items;
-                    }catch(e){}
-                }
-                return [];
-            }
-            const apis=await pull(['/api/pools/api','/api/api-pool']);
-            const ips=await pull(['/api/pools/ip','/api/ip-pool','/api/proxies']);
-            const ac=document.getElementById('pool-api-count');
-            const ic=document.getElementById('pool-ip-count');
-            if(ac) ac.textContent='('+apis.length+')';
-            if(ic) ic.textContent='('+ips.length+')';
-            const ab=document.getElementById('pool-api-box');
-            const ib=document.getElementById('pool-ip-box');
-            if(ab) ab.innerHTML=apis.map((x,i)=>`<div>#${i+1} ${(x.api_id||x.id||'')} ${(x.api_hash||x.hash||'')}</div>`).join('')||'暂无';
-            if(ib) ib.innerHTML=ips.map((x,i)=>`<div>#${i+1} ${(x.ip||x.host||x.proxy||x.url||JSON.stringify(x))}</div>`).join('')||'暂无';
-        }
-
-        
-        
-        function setPoolCard(id, n){
-            const el=document.getElementById(id);
-            if(el) el.textContent=n;
-        }
-
-        async function fillPoolCards(){
-            async function n(urls, filesHint){
-                for (const u of urls){
-                    try{
-                        const r = await fetchAPI(u);
-                        const d = await r.json();
-                        const items = d.items||d.data||d.list||d.proxies||d.ips||d.accounts||(Array.isArray(d)?d:[]);
-                        if (Array.isArray(items) && items.length) return items.length;
-                        if (typeof d.count==="number") return d.count;
-                    }catch(e){}
-                }
-                return 0;
-            }
-            const api = await n(['/api/pools/api','/api/api-pool','/api/stats']);
-            const ip  = await n(['/api/pools/ip','/api/ip-pool','/api/proxies']);
-            const a=document.getElementById('stat-api-pool');
-            const i=document.getElementById('stat-ip-pool');
-            if(a) a.textContent = api;
-            if(i) i.textContent = ip;
-        }
-        document.addEventListener('DOMContentLoaded', ()=>setTimeout(fillPoolCards,300));
-
-        
-        function syncPoolCardsFromDOM(){
-            const ta=document.getElementById('api-pool-text');
-            if(ta){
-                const n=ta.value.split(/\n/).map(s=>s.trim()).filter(Boolean).length;
-                const el=document.getElementById('stat-api-pool');
-                if(el) el.textContent=n;
-            }
-            const ip=document.getElementById('ip-pool-text')||document.getElementById('proxy-pool-text');
-            if(ip){
-                const n=ip.value.split(/\n/).map(s=>s.trim()).filter(Boolean).length;
-                const el=document.getElementById('stat-ip-pool');
-                if(el) el.textContent=n;
-            }
-        }
-        setInterval(syncPoolCardsFromDOM, 2000);
-        document.addEventListener('DOMContentLoaded', ()=>setTimeout(syncPoolCardsFromDOM,500));
-
-        </script>
-
-        <div class="tab-content" id="tab-ip">
-            <div class="section-title">IP 池（每条可多选水军，Ctrl 多选）</div>
-            <div id="ip-bind-list"></div>
-            <div style="margin-top:12px;display:flex;gap:8px;">
-                <button class="btn" type="button" onclick="addIpBindRow();return false;">+ 添加 IP</button>
-                <button class="btn btn-primary" type="button" onclick="saveIpBinds();return false;">保存匹配</button>
-            </div>
-        </div>
-        <div class="tab-content" id="tab-api">
-            <div class="section-title">API 池（每行 api_id,api_hash）</div>
-            <textarea id="api-pool-text" placeholder="每行 api_id,api_hash" style="width:100%;min-height:220px;padding:10px;"></textarea>
-            <div style="margin-top:12px;">
-                <button class="btn btn-primary" type="button" onclick="setPoolCard('stat-api-pool', (items&&items.length)||0); window.__dumpApiPool();return false;">保存 API 池</button>
-            </div>
-        </div>
-
-
-<script>
-(function(){
-  function paint(){
-    var ta=document.getElementById('api-pool-text');
-    var box=document.getElementById('api-pool-result') || document.getElementById('api-pool-accounts');
-    if(!box) return;
-    var items=[];
-    String(ta&&ta.value||'').split(/\n/).forEach(function(line){
-      line=String(line||'').trim();
-      if(!line) return;
-      var p=line.split(/[\s,;]+/).filter(Boolean);
-      if(p.length===1 && /^\d+-/.test(p[0])){
-        var n=p[0].indexOf("-");
-        p=[p[0].slice(0,n), p[0].slice(n+1)];
-      }
-      if(p.length>=2) items.push({id:p[0], hash:p[1]});
-    });
-    if(!items.length){
-      box.innerHTML='<div style="color:#888">没有 API 记录</div>';
-      return;
-    }
-    if(false) box.innerHTML='+items.map(function(it,i){
-      return '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin:8px 0;background:#f8fafc;">'
-        +'<div>#'+(i+1)+'　<code>'+it.id+'</code></div>'
-        +'<div style="font-size:12px;color:#6b7280;word-break:break-all;margin-top:4px;">'+it.hash+'</div>'
-        +'</div>';
-    }).join('');
-  }
-  setPoolCard('stat-api-pool', (items&&items.length)||0); window.__dumpApiPool=function(){};
-  document.addEventListener('click', function(e){
-    var b=e.target.closest && e.target.closest('button');
-    if(b && /保存 API/.test(b.textContent||'')) setTimeout(paint, 0);
-  });
-  setTimeout(function(){}, 400);
-})();
-</script>
-
-<script>
-async function __loadPoolBox(){
-  const ta=document.getElementById('api-pool-text');
-  if(!ta) return;
-  const urls=['/api/pools/api','/api/api-pool','/api/pool/api','/api/apipool'];
-  for(const u of urls){
-    try{
-      const r=await fetch(u);
-      const d=await r.json();
-      const items=d.items||d.data||d.list||(Array.isArray(d)?d:[]);
-      if(items && items.length){
-        ta.value=items.map(x=> (x.api_id||x.id)+','+(x.api_hash||x.hash||'')).join('\n');
-        if(typeof loadApiPoolAccounts==='function') loadApiPoolAccounts();
-        return;
-      }
-    }catch(e){}
-  }
-}
-document.addEventListener('DOMContentLoaded', ()=>setTimeout(__loadPoolBox,200));
-document.addEventListener('click', e=>{
-  const tab=e.target.closest && e.target.closest('.tab');
-  if(tab && /API/.test(tab.textContent||'')) setTimeout(__loadPoolBox,50);
-});
 </script>
 </body>
 </html>
