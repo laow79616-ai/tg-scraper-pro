@@ -72,7 +72,7 @@ if ADMIN_PASSWORD == "Ab123456987":
 @app.before_request
 def require_login():
     """所有请求需要登录认证"""
-    allowed_paths = ['/api/login', '/api/auth/status', '/login.html', '/api/ip-pool/bind', '/api/ip-pool-add', '/api/ip-pool-readonly', '/api/ip-pool']
+    allowed_paths = ['/api/login', '/api/auth/status', '/login.html']
     if request.path in allowed_paths:
         return None
     if request.path.startswith('/static/'):
@@ -1438,7 +1438,6 @@ def _auto_assign_api(account, accounts=None):
 
 
 @app.route("/api/api-pool", methods=["GET","POST"])
-@app.route("/api/pools/api", methods=["GET","POST"])
 def api_api_pool():
     if request.method=="POST":
         data=request.json or {}
@@ -2027,95 +2026,47 @@ def create_account_simple():
         return jsonify({"status": "error", "message": str(e)})
 
 
-
-@app.route("/api/ip-pool", methods=["GET","POST"])
-@app.route("/api/ip-pool-data", methods=["GET","POST"])
-def api_ip_pool_alias():
-    return api_ip_pool_add()
-
-@app.route("/api/ip-pool-add", methods=["GET","POST"])
-def api_ip_pool_add():
-    data = request.get_json(silent=True) or {}
-    if request.form:
-        data = dict(data)
-        data.update(request.form.to_dict())
-    raw = data.get("text") or data.get("raw") or data.get("content") or data.get("ip_text") or ""
-    lines = data.get("lines") or data.get("proxies") or data.get("items") or data.get("ips") or []
-    if isinstance(lines, str):
-        raw = raw or lines
-        lines = []
-    if raw:
-        lines = list(lines) + [x for x in str(raw).splitlines() if x.strip()]
-    logger.info("ip-pool save keys=%s lines=%s", list(data.keys()), len(lines))
-    def _norm(line):
-        line = str(line or "").strip()
-        if not line:
-            return ""
-        if isinstance(line, dict):
-            line = line.get("proxy") or ""
-        if "://" in line:
-            return line
-        a = line.split(":")
-        if len(a) >= 4:
-            return "socks5://%s:%s@%s:%s" % (":".join(a[2:-1]), a[-1], a[0], a[1])
-        return line
-    path = os.path.join(DATA_DIR, "ip_pool.json")
-    old = load_json(path, {"items": []})
-    items = old if isinstance(old, list) else (old.get("items") or [])
-    have = set()
-    out = []
-    for it in items:
-        px = (it.get("proxy") if isinstance(it, dict) else str(it)).strip()
-        ids = list((it.get("account_ids") if isinstance(it, dict) else []) or [])
-        if px and px not in have:
-            out.append({"proxy": px, "account_ids": [str(x) for x in ids]})
-            have.add(px)
-    added = 0
-    for line in lines:
-        px = _norm(line)
-        if px and px not in have:
-            out.append({"proxy": px, "account_ids": []})
-            have.add(px)
-            added += 1
-    save_json(path, {"items": out})
-    return jsonify({"status": "ok", "added": added, "count": len(out), "items": out})
-
-
-@app.route("/api/ip-pool/bind", methods=["POST"])
-def api_ip_pool_bind():
-    data = request.json or {}
-    proxy = str(data.get("proxy") or "").strip()
-    acc_ids = [str(x) for x in (data.get("account_ids") or [])]
-    path = os.path.join(DATA_DIR, "ip_pool.json")
-    raw = load_json(path, {"items": []})
-    items = raw if isinstance(raw, list) else (raw.get("items") or [])
-    out, found = [], False
-    for it in items:
-        px = it.get("proxy") if isinstance(it, dict) else str(it)
-        ids = list(it.get("account_ids") or []) if isinstance(it, dict) else []
-        if px == proxy:
-            ids, found = acc_ids, True
-        out.append({"proxy": px, "account_ids": ids})
-    if proxy and not found:
-        out.append({"proxy": proxy, "account_ids": acc_ids})
-    save_json(path, {"items": out})
-    return jsonify({"status": "ok", "items": out, "bound": len(acc_ids)})
-
-
-@app.route("/api/ip-pool/delete", methods=["POST"])
+@app.route("/api/ip-pool/delete", methods=["POST","DELETE"])
 def api_ip_pool_delete():
+    import json
     data = request.json or {}
-    proxy = str(data.get("proxy") or "").strip()
-    path = os.path.join(DATA_DIR, "ip_pool.json")
-    raw = load_json(path, {"items": []})
-    items = raw if isinstance(raw, list) else (raw.get("items") or [])
-    out = []
-    for it in items:
-        px = (it.get("proxy") if isinstance(it, dict) else str(it)).strip()
-        if px != proxy:
-            out.append(it if isinstance(it, dict) else {"proxy": px, "account_ids": []})
-    save_json(path, {"items": out})
-    return jsonify({"status": "ok", "count": len(out)})
+    idx = data.get("index", data.get("idx"))
+    proxy = str(data.get("proxy") or data.get("url") or "").strip()
+    fp = os.path.join(DATA_DIR, "ip_pool.json")
+    try:
+        pool = json.loads(open(fp, "r", encoding="utf-8").read() or "{}")
+    except Exception:
+        pool = {"items": []}
+    items = pool.get("items") if isinstance(pool, dict) else pool
+    if not isinstance(items, list):
+        items = []
+    def _px(it):
+        if isinstance(it, str):
+            return it.strip()
+        if isinstance(it, dict):
+            return str(it.get("proxy") or it.get("url") or "").strip()
+        return ""
+    new_items = items
+    if proxy:
+        new_items = [it for it in items if _px(it) != proxy]
+    elif idx is not None and str(idx) != "":
+        try:
+            i = int(idx)
+            if 0 <= i < len(items):
+                new_items = items[:i] + items[i+1:]
+            else:
+                return jsonify({"status":"error","message":"删除失败: 序号不存在"}), 400
+        except Exception as e:
+            return jsonify({"status":"error","message":"删除失败: %s" % e}), 400
+    else:
+        return jsonify({"status":"error","message":"缺少 proxy"}), 400
+    if isinstance(pool, dict):
+        pool["items"] = new_items
+        out = pool
+    else:
+        out = new_items
+    open(fp, "w", encoding="utf-8").write(json.dumps(out, ensure_ascii=False, indent=2))
+    return jsonify({"status":"ok","count":len(new_items)})
 
 if __name__ == "__main__":
     print("=" * 50)
@@ -2151,137 +2102,3 @@ if __name__ == "__main__":
     auto_connect_on_startup()
 
     app.run(host="0.0.0.0", port=8090, threaded=True)
-
-
-
-def api_ip_pool_bind_one():
-    data = request.json or {}
-    proxy = (data.get("proxy") or "").strip()
-    ids = data.get("account_ids") or []
-    if isinstance(ids, str):
-        ids = [x.strip() for x in ids.split(",") if x.strip()]
-    d = load_ip_pool() if "load_ip_pool" in globals() else load_json(os.path.join(DATA_DIR, "ip_pool.json"), {"items": []})
-    items = d.get("items") if isinstance(d, dict) else (d or [])
-    found = False
-    for it in items:
-        px = it if isinstance(it, str) else (it.get("proxy") or "")
-        if px == proxy:
-            if isinstance(it, str):
-                it = {"proxy": px}
-            it["account_ids"] = ids
-            it["acc_id"] = ids[0] if ids else ""
-            found = True
-            # replace in list
-            for i, old in enumerate(items):
-                op = old if isinstance(old, str) else (old.get("proxy") or "")
-                if op == proxy:
-                    items[i] = it
-                    break
-            break
-    if not found:
-        items.append({"proxy": proxy, "account_ids": ids, "acc_id": ids[0] if ids else ""})
-    obj = {"items": items}
-    if "save_ip_pool" in globals():
-        save_ip_pool(obj)
-    else:
-        save_json(os.path.join(DATA_DIR, "ip_pool.json"), obj)
-    return jsonify({"status": "ok", "items": items})
-
-
-@app.route("/api/ip-pool-data", methods=["GET", "POST"])
-def api_ip_pool_data():
-    path = os.path.join(DATA_DIR, "ip_pool.json")
-    d = load_json(path, {"items": []}) if "load_json" in globals() else {"items": []}
-    if "load_ip_pool" in globals():
-        try:
-            d = load_ip_pool()
-        except Exception:
-            pass
-    items = d.get("items") if isinstance(d, dict) else (d or [])
-    if request.method == "POST":
-        data = request.json or {}
-        raw = data.get("text") or data.get("raw") or ""
-        old_map = {}
-        for it in items:
-            if isinstance(it, dict):
-                old_map[it.get("proxy") or ""] = it
-            elif isinstance(it, str):
-                old_map[it] = {"proxy": it}
-        new_items = []
-        for line in str(raw).splitlines():
-            line = line.strip()
-            if not line or line.startswith("socks5://user"):
-                continue
-            prev = old_map.get(line) or {"proxy": line, "account_ids": []}
-            if isinstance(prev, str):
-                prev = {"proxy": prev, "account_ids": []}
-            prev["proxy"] = line
-            new_items.append(prev)
-        obj = {"items": new_items}
-        if "save_ip_pool" in globals():
-            save_ip_pool(obj)
-        else:
-            save_json(path, obj)
-        items = new_items
-    return jsonify({"status": "ok", "count": len(items or []), "items": items or []})
-
-
-@app.route("/api/ip-pool-list", methods=["GET"])
-def api_ip_pool_list():
-    path = os.path.join(DATA_DIR, "ip_pool.json")
-    raw = load_json(path, {"items": []})
-    if isinstance(raw, list):
-        items = [{"proxy": x, "account_ids": []} if isinstance(x, str) else x for x in raw]
-    else:
-        items = raw.get("items") or raw.get("data") or raw.get("pool") or []
-    return jsonify({"status": "ok", "count": len(items or []), "items": items or []})
-
-
-@app.route("/api/ip-pool", methods=["GET","POST"])
-def api_ip_pool_merge():
-    path = os.path.join(DATA_DIR, "ip_pool.json")
-    raw = load_json(path, {"items": []})
-    items = raw if isinstance(raw, list) else (raw.get("items") or [])
-    if request.method == "POST":
-        data = request.json or {}
-        incoming = data.get("items")
-        text = str(data.get("text") or "")
-        if incoming:
-            items = incoming
-        elif text.strip():
-            have = {(it.get("proxy") if isinstance(it, dict) else it) for it in items}
-            for line in text.splitlines():
-                line=line.strip()
-                if line and line not in have:
-                    items.append({"proxy": line, "account_ids": []})
-        save_json(path, {"items": items})
-    return jsonify({"status":"ok","count":len(items),"items":items})
-
-
-
-def api_ip_pool_add():
-    data = request.json or {}
-    lines = data.get("lines") or []
-    path = os.path.join(DATA_DIR, "ip_pool.json")
-    raw = load_json(path, {"items": []})
-    items = raw if isinstance(raw, list) else (raw.get("items") or [])
-    have = set()
-    norm_items = []
-    for it in items:
-        if isinstance(it, dict):
-            px = it.get("proxy") or it.get("ip") or ""
-            norm_items.append(it if "proxy" in it else {"proxy": px, "account_ids": it.get("account_ids") or []})
-            have.add(px)
-        elif isinstance(it, str):
-            norm_items.append({"proxy": it, "account_ids": []})
-            have.add(it)
-    added = 0
-    for line in lines:
-        line = str(line).strip()
-        if not line or line in have:
-            continue
-        norm_items.append({"proxy": line, "account_ids": []})
-        have.add(line)
-        added += 1
-    save_json(path, {"items": norm_items})
-    return jsonify({"status":"ok","added":added,"count":len(norm_items),"items":norm_items})
